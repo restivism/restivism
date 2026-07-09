@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { type NostrSigner, NostrEvent, NostrFilter, NPool, NRelay1 } from '@nostrify/nostrify';
-import { verifyEvent } from 'nostr-tools';
+import { getEventHash, verifyEvent } from 'nostr-tools';
 import { NostrContext } from '@nostrify/react';
 import { NUser, useNostrLogin } from '@nostrify/react/login';
 import { useQueryClient } from '@tanstack/react-query';
@@ -36,9 +36,14 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
     open(url: string) {
       return new NRelay1(url, {
         // Gift-wrap (1059/21059) outer signatures are redundant on the client
-        // skip them, verify everything else.
+        // (ephemeral or group-shared key), so skip the Schnorr verify for them.
+        // The event id (content hash) must still be validated so that the id we
+        // index/dedupe on actually matches the event's contents; only the
+        // signature check is redundant. Verify everything else in full.
         verifyEvent: (event: NostrEvent): boolean => {
-          if (event.kind === 1059 || event.kind === 21059) return true;
+          if (event.kind === 1059 || event.kind === 21059) {
+            return event.id === getEventHash(event);
+          }
           return verifyEvent(event);
         },
 
