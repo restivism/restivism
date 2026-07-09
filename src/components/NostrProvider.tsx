@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { type NostrSigner, NostrEvent, NostrFilter, NPool, NRelay1 } from '@nostrify/nostrify';
+import { verifyEvent } from 'nostr-tools';
 import { NostrContext } from '@nostrify/react';
 import { NUser, useNostrLogin } from '@nostrify/react/login';
 import { useQueryClient } from '@tanstack/react-query';
@@ -34,6 +35,13 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
   const [pool] = useState<NPool>(() => new NPool({
     open(url: string) {
       return new NRelay1(url, {
+        // Gift-wrap (1059/21059) outer signatures are redundant on the client
+        // skip them, verify everything else.
+        verifyEvent: (event: NostrEvent): boolean => {
+          if (event.kind === 1059 || event.kind === 21059) return true;
+          return verifyEvent(event);
+        },
+
         // NIP-42: Respond to relay AUTH challenges by signing a kind
         // 22242 ephemeral event with the current user's signer.
         auth: async (challenge: string) => {
