@@ -72,7 +72,7 @@ The component takes no props. It reads from and writes to `AppContext` directly,
 NIP-65 defines kind 10002 ("Relay List Metadata") as a replaceable event containing `r` tags for each relay, optionally annotated with `read` / `write` markers:
 
 ```
-["r", "wss://relay.damus.io"]            // both read and write
+["r", "wss://relay.ditto.pub"]           // both read and write
 ["r", "wss://relay.example.com", "read"] // read-only
 ["r", "wss://writer.example.com", "write"] // write-only
 ```

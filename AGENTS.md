@@ -246,8 +246,9 @@ const defaultConfig: AppConfig = {
   relayMetadata: {
     relays: [
       { url: 'wss://relay.ditto.pub', read: true, write: true },
-      { url: 'wss://relay.primal.net', read: true, write: true },
-      { url: 'wss://relay.damus.io', read: true, write: true },
+      { url: 'wss://relay.dreamith.to', read: true, write: true },
+      { url: 'wss://relay.primal.net', read: false, write: true },
+      { url: 'wss://nos.lol', read: false, write: true },
     ],
     updatedAt: 0,
   },

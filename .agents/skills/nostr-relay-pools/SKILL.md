@@ -18,7 +18,7 @@ function useSpecificRelay() {
   const { nostr } = useNostr();
 
   // Connect to a specific relay
-  const relay = nostr.relay('wss://relay.damus.io');
+  const relay = nostr.relay('wss://relay.ditto.pub');
 
   // Query from this relay only
   const events = await relay.query([{ kinds: [1], limit: 15 }]);
@@ -45,7 +45,7 @@ function useRelayGroup() {
 
   // Create a group of specific relays
   const relayGroup = nostr.group([
-    'wss://relay.damus.io',
+    'wss://relay.ditto.pub',
     'wss://relay.primal.net',
     'wss://nos.lol',
   ]);
