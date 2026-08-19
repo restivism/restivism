@@ -251,6 +251,17 @@ Key facts about `buildUnsignedPsbt`:
 - Fee uses `ceil((numInputs · 57.5 + numOutputs · 43 + 10.5) · feeRate)`.
 - Change is added back to the sender's own Taproot address **only** if it's ≥ 546 sats (dust limit). Below dust, change is donated to fees and the tx has 1 output instead of 2.
 - Throws `Insufficient funds` if `amount + fee > total UTXO value`.
+- Throws `Invalid fee rate` if `feeRate` is not a finite number ≥ 1.
+
+That last guard is load-bearing. A `NaN` fee rate produces a `NaN` fee, and
+every check downstream of the fee — the dust comparison, the balance check, the
+"is there a fee to show" check in the UI — is a `<` or `>=` comparison, and
+*every* comparison with NaN is false. So NaN doesn't fail: it silently skips the
+change output, passes the balance check, renders as "Fee 0", and builds a
+perfectly valid transaction that pays the wallet's entire balance to miners.
+`getFeeRates` sanitizes the remote response for the same reason — the old
+`Math.ceil(data['1'] || 1)` caught a *missing* key but turned a truthy
+non-number like `{"1": "5"}` into NaN.
 
 For send-max, use `maxSendable(totalBalance, numInputs, feeRate)` — it correctly subtracts a 1-output fee.
 
