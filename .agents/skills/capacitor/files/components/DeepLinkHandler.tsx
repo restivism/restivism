@@ -14,6 +14,17 @@ import { Capacitor } from '@capacitor/core';
  * Must be rendered **inside** a `<BrowserRouter>` (so `useNavigate` works).
  * Safe to render unconditionally — on web it is a no-op.
  *
+ * ## Deep links are untrusted input
+ *
+ * Any web page the user visits can open `myapp://anything`, which arrives here
+ * and becomes a `navigate()` call. Universal links are verified by the OS;
+ * custom schemes are not, and the `appUrlOpen` event does not distinguish
+ * them. Treat the destination as attacker-chosen: **no route may perform a
+ * side effect on mount** (publishing an event, following, paying, deleting).
+ * Such a route is an action any website can trigger without the user knowing.
+ * Require a click on the page instead. Apps with no custom scheme should also
+ * reject anything but `url.protocol === 'https:'` below.
+ *
  * To enable deep links:
  *
  * **iOS (Universal Links):**

@@ -109,6 +109,20 @@ Render `<DeepLinkHandler />` **inside** `<BrowserRouter>` so `useNavigate()` wor
 </BrowserRouter>
 ```
 
+**A deep link is an untrusted navigation.** Any web page the user visits can
+open `myapp://whatever` — no prompt, no gesture beyond the tap that got them to
+the page. `DeepLinkHandler` turns that into a `navigate()` call, so a custom
+scheme lets an attacker put the user on any route in your app. Universal links
+(`https://`) are safer, since the OS only routes them to you after verifying
+`apple-app-site-association` / `assetlinks.json`, but the app has no way to tell
+the two apart once the event arrives.
+
+So: **no route may perform a side effect on mount.** A route that publishes an
+event, follows a user, sends a payment, or deletes something as soon as it
+renders is an action any website can trigger silently. Render a confirmation
+the user has to click instead. If your app has no custom scheme, restricting
+the handler to `url.protocol === 'https:'` is worth doing as well.
+
 ### 7. Add platforms and build
 
 ```bash
