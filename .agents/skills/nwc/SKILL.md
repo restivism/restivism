@@ -24,6 +24,8 @@ All files live under `.agents/skills/nwc/files/` and must be copied into `src/` 
 | `files/hooks/useNWCContext.ts` | `src/hooks/useNWCContext.ts` |
 | `files/hooks/useWallet.ts` | `src/hooks/useWallet.ts` |
 | `files/hooks/useZaps.ts` | `src/hooks/useZaps.ts` |
+| `files/lib/bolt11.ts` | `src/lib/bolt11.ts` |
+| `files/lib/lnurlPay.ts` | `src/lib/lnurlPay.ts` |
 | `files/contexts/NWCContext.tsx` | `src/contexts/NWCContext.tsx` |
 | `files/components/WalletModal.tsx` | `src/components/WalletModal.tsx` |
 | `files/components/ZapDialog.tsx` | `src/components/ZapDialog.tsx` |
@@ -122,7 +124,7 @@ function MyComponent() {
     removeConnection,   // (connectionString: string) => void
     setActiveConnection,// (connectionString: string) => void
     getActiveConnection,// () => NWCConnection | null
-    sendPayment,        // (connection, invoice) => Promise<{ preimage: string }>
+    sendPayment,        // (connection, invoice, expectedAmountMsat) => Promise<{ preimage: string }>
   } = useNWC();
 }
 ```
@@ -160,8 +162,28 @@ The `zap(amount, comment)` function will:
 1. Look up the author's LNURL endpoint from their profile's `lud16`/`lud06`
 2. Create and sign a NIP-57 zap request
 3. Fetch a Lightning invoice from the LNURL service
-4. Try to pay it via NWC (preferred), then WebLN, then expose the invoice for QR/manual payment
-5. Show toast feedback and invalidate zap query caches on success
+4. **Decode the invoice and reject it unless it charges exactly the requested amount**
+5. Try to pay it via NWC (preferred), then WebLN, then expose the invoice for QR/manual payment
+6. Show toast feedback and invalidate zap query caches on success
+
+### Never pay an invoice you haven't read
+
+Step 4 is not optional. The LNURL endpoint is chosen by the **recipient**, so the
+invoice it returns is attacker-controlled whenever the recipient is hostile:
+anyone who posts a note and runs their own pay server otherwise decides how much
+their victims spend, *after* the victim has approved a figure. A user who
+approves 776 sats can be charged 5,000,000, and — since the wallet is handed only
+the invoice string — nothing downstream will notice.
+
+`lib/bolt11.ts` provides `assertInvoiceAmount(invoice, expectedMsat)`, which
+decodes the BOLT11 and throws unless the amount matches exactly. Amountless
+invoices are rejected outright, since they let the wallet or payee pick the sum.
+`useNWC.sendPayment` takes the approved amount and re-checks it, so no caller can
+hand a wallet an unvetted invoice.
+
+If you add another payment path, put the check in front of it. Do not use a
+regex on the human-readable part for this — that is a display heuristic, not an
+authentication check.
 
 ## Components
 
@@ -223,7 +245,7 @@ Errors at each stage fall through to the next method, with a toast explaining wh
 
 - **NIP-47 (NWC)** — wallet connection strings start with `nostr+walletconnect://` (or legacy `nostrwalletconnect://`). The `@getalby/sdk` `LN` client handles the underlying encrypted request/response events with the wallet service pubkey over relays defined in the URI.
 - **NIP-57 (Zaps)** — `nip57.makeZapRequest` builds the kind-9734 zap request. For addressable events (kinds 30000–39999) the skill passes the event object (so an `a` tag is included); for all other kinds it passes just the event id (so an `e` tag is included). The zap request is **signed but not published** — it's sent directly to the LNURL endpoint in the query string, which returns a BOLT11 invoice.
-- **LNURL** — resolved from the author's `lud16` (email-style) or `lud06` (bech32) metadata field via `nip57.getZapEndpoint`.
+- **LNURL** — resolved from the author's `lud16` (email-style) or `lud06` (bech32) metadata field by `lib/lnurlPay.ts`. It does not use `nip57.getZapEndpoint`, which returns only the callback URL and discards the `minSendable`/`maxSendable` bounds and the `metadata` string needed to validate the response. HTTPS is required for both the LNURL and the callback it names.
 - **Zap receipts** — kind 9735 events published by the LNURL service after payment. The skill queries them by `#e` (regular events) or `#a` (addressable events) and sums sats from the `amount` tag, BOLT11 invoice, or zap request description (in that order of preference).
 
 ## Tips
