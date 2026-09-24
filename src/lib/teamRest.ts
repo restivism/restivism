@@ -1,5 +1,14 @@
 export type CoverageStatus = 'waiting' | 'covered' | 'paused';
 export type PulseAnswer = 'yes' | 'partly' | 'no';
+export type AlignmentScore = 1 | 2 | 3 | 4 | 5;
+
+export interface CovenantAlignment {
+  id: string;
+  agreementRevision: number;
+  score: AlignmentScore;
+  comment?: string;
+  recordedAt: number;
+}
 
 export interface RestAgreement {
   protectedRest: boolean;
@@ -29,6 +38,8 @@ export interface OrganizationRestState {
   version: 2;
   agreement: RestAgreement;
   coverage: CoverageItem[];
+  /** Anonymous-to-the-UI covenant alignment responses. No alias is stored here. */
+  alignmentResponses?: CovenantAlignment[];
   pulse?: TeamPulse;
 }
 
@@ -44,6 +55,7 @@ export const DEFAULT_ORGANIZATION_REST_STATE: OrganizationRestState = {
   version: 2,
   agreement: DEFAULT_REST_AGREEMENT,
   coverage: [],
+  alignmentResponses: [],
 };
 
 export function agreementSummary(agreement: RestAgreement) {
@@ -69,6 +81,12 @@ export function createDemoOrganizationRestState(): OrganizationRestState {
       revision: 1,
       adoptedAt: Date.now(),
     },
+    alignmentResponses: [
+      { id: crypto.randomUUID(), agreementRevision: 1, score: 5, recordedAt: Date.now() - 8_000 },
+      { id: crypto.randomUUID(), agreementRevision: 1, score: 4, recordedAt: Date.now() - 6_000 },
+      { id: crypto.randomUUID(), agreementRevision: 1, score: 4, recordedAt: Date.now() - 4_000 },
+      { id: crypto.randomUUID(), agreementRevision: 1, score: 3, recordedAt: Date.now() - 2_000 },
+    ],
     coverage: [
       {
         id: crypto.randomUUID(),
