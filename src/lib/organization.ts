@@ -42,6 +42,8 @@ export interface OrganizationMembership {
   leaderSecretKey?: string;
   /** Anonymous per-membership signing key for alignment and restfulness submissions. */
   memberSecretKey?: string;
+  /** Member-controlled preference for automatic anonymous weekly battery sharing. */
+  autoShareWeeklyBattery?: boolean;
   /** Leaders keep the encrypted invite so they can share it again. */
   inviteCode?: string;
 }
