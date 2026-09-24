@@ -6,6 +6,7 @@ export interface CovenantAlignment {
   id: string;
   agreementRevision: number;
   score: AlignmentScore;
+  comment?: string;
   recordedAt: number;
 }
 
