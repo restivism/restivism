@@ -319,12 +319,6 @@ function OrganizationGate({
           </button>
         </div>
 
-        {!orgSync.canSync && (
-        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
-          This organization uses the older local-only invite format. To test cross-browser sharing, create a new organization on this branch and have members join using its new invite.
-        </div>
-      )}
-
       {message && (
           <p className="mt-4 rounded-xl border border-primary/20 bg-secondary/50 px-4 py-3 text-base" role="status">
             {message}
@@ -735,6 +729,12 @@ function OrganizationWorkspace({
           </div>
         )}
       </section>
+
+      {!orgSync.canSync && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
+          This organization uses the older local-only invite format. To test cross-browser sharing, create a new organization on this branch and have members join using its new invite.
+        </div>
+      )}
 
       {message && (
         <div className="rounded-xl border border-primary/20 bg-secondary/50 px-4 py-3 text-base" role="status">
