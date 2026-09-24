@@ -211,20 +211,16 @@ function OrganizationGate({
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-4 py-8 sm:px-6 sm:py-12">
-      <section className="overflow-hidden rounded-3xl border bg-card shadow-sm">
-        <div className="bg-gradient-to-br from-primary/12 via-card to-ember/10 p-6 sm:p-8">
-          <div className="flex items-start gap-4">
-            <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-primary text-primary-foreground shadow-sm">
-              <Building2 className="size-6" aria-hidden />
-            </span>
-            <div className="space-y-2">
-              <p className="text-sm font-bold uppercase tracking-widest text-primary">Organization rest</p>
-              <h1 className="text-4xl font-semibold leading-tight sm:text-5xl">Rest works better when the team protects it.</h1>
-              <p className="max-w-2xl text-lg leading-relaxed text-muted-foreground">
-                Create your organization or join one with the passcode your organization leader created.
-              </p>
-            </div>
-          </div>
+      <section className="relative isolate overflow-hidden rounded-3xl border shadow-lg">
+        <TeamBackdrop />
+        <div className="flex min-h-96 flex-col justify-end gap-3 p-6 pt-40 sm:min-h-[28rem] sm:p-8">
+          <p className="text-sm font-bold uppercase tracking-widest text-amber-200">Organization rest</p>
+          <h1 className="max-w-xl text-4xl font-semibold leading-tight text-white drop-shadow sm:text-5xl">
+            Rest works better when the team protects it.
+          </h1>
+          <p className="max-w-xl text-lg leading-relaxed text-white/85">
+            One person sleeps. Everyone else holds the line. Create your organization or join one with the passcode your leader created.
+          </p>
         </div>
       </section>
 
@@ -567,39 +563,52 @@ function OrganizationWorkspace({
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-4 py-8 sm:px-6 sm:py-12">
-      <section className="rounded-3xl border bg-card p-5 shadow-sm sm:p-7">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex min-w-0 items-start gap-3">
-            <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-primary text-primary-foreground">
-              <Building2 className="size-5" aria-hidden />
-            </span>
+      <section className="overflow-hidden rounded-3xl border bg-card shadow-sm">
+        <div className="relative isolate p-5 pt-28 sm:p-7 sm:pt-36">
+          <TeamBackdrop />
+          <div className="flex flex-wrap items-end justify-between gap-4">
             <div className="min-w-0">
-              <p className="text-sm font-bold uppercase tracking-widest text-primary">
+              <p className="text-sm font-bold uppercase tracking-widest text-amber-200">
                 {membership.role === 'leader' ? 'Organization leader' : 'Organization member'}
               </p>
-              <h1 className="truncate text-3xl font-semibold sm:text-4xl">{membership.name}</h1>
-              <p className="text-base text-muted-foreground">You are here as {membership.alias}.</p>
+              <h1 className="truncate text-4xl font-semibold text-white drop-shadow sm:text-5xl">{membership.name}</h1>
+              <p className="text-base text-white/85">You are here as {membership.alias}.</p>
             </div>
+
+            {memberships.length > 1 && (
+              <label className="space-y-1 text-sm font-semibold text-white/85">
+                <span className="block">Switch organization</span>
+                <select
+                  value={membership.id}
+                  onChange={(event) => onSelectOrganization(event.target.value)}
+                  className="rounded-xl border bg-background px-3 py-2 text-base text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  {memberships.map((item) => (
+                    <option key={item.id} value={item.id}>{item.name}</option>
+                  ))}
+                </select>
+              </label>
+            )}
           </div>
 
-          {memberships.length > 1 && (
-            <label className="space-y-1 text-sm font-semibold text-muted-foreground">
-              <span className="block">Switch organization</span>
-              <select
-                value={membership.id}
-                onChange={(event) => onSelectOrganization(event.target.value)}
-                className="rounded-xl border bg-background px-3 py-2 text-base text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                {memberships.map((item) => (
-                  <option key={item.id} value={item.id}>{item.name}</option>
-                ))}
-              </select>
-            </label>
-          )}
+          <dl className="mt-6 grid grid-cols-3 gap-2">
+            {([
+              ['covered', 'Covered', 'text-emerald-300'],
+              ['paused', 'Paused', 'text-amber-200'],
+              ['waiting', 'Waiting', 'text-white'],
+            ] as const).map(([status, label, color]) => (
+              <div key={status} className="flex flex-col rounded-xl border border-white/15 bg-black/35 px-3 py-2 backdrop-blur-md">
+                <dt className="order-2 text-sm font-semibold text-white/75">{label}</dt>
+                <dd className={cn('font-display text-3xl font-semibold tabular-nums', color)}>
+                  {state.coverage.filter((item) => item.status === status).length}
+                </dd>
+              </div>
+            ))}
+          </dl>
         </div>
 
         {membership.role === 'leader' && membership.inviteCode && (
-          <div className="mt-5 flex flex-wrap items-center gap-2 border-t pt-5">
+          <div className="flex flex-wrap items-center gap-2 border-t px-5 py-4 sm:px-7">
             <button
               type="button"
               onClick={copyInvite}
@@ -619,7 +628,7 @@ function OrganizationWorkspace({
         )}
 
         {showInvite && membership.inviteCode && (
-          <div className="mt-4 rounded-xl bg-secondary/60 p-4">
+          <div className="mx-5 mb-5 rounded-xl bg-secondary/60 p-4 sm:mx-7">
             <p className="font-semibold">Organization invite code</p>
             <p className="mt-2 break-all font-mono text-xs leading-relaxed">{membership.inviteCode}</p>
             <p className="mt-3 text-sm text-muted-foreground">
@@ -956,6 +965,16 @@ function OrganizationWorkspace({
         Organization data is separated by organization ID in this browser. This branch does not yet synchronize agreements,
         coverage, or reflections between devices, so it should be treated as a local-first prototype rather than server-enforced authorization.
       </p>
+    </div>
+  );
+}
+
+/** The team keeping watch over a sleeping organizer, darkened for legible text. */
+function TeamBackdrop({ className }: { className?: string }) {
+  return (
+    <div className={cn('absolute inset-0 -z-10', className)} aria-hidden>
+      <img src="/team.webp" alt="" className="h-full w-full object-cover object-[center_60%]" />
+      <div className="absolute inset-0 bg-gradient-to-t from-[hsl(250_45%_8%/0.95)] via-[hsl(250_45%_10%/0.55)] to-[hsl(250_45%_10%/0.1)]" />
     </div>
   );
 }
