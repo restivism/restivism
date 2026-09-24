@@ -22,7 +22,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <span className="grid size-9 place-items-center rounded-full bg-gradient-to-br from-primary to-ember text-primary-foreground shadow-sm">
               <RestGlyph className="size-6" aria-hidden />
             </span>
-            <span className="font-display text-2xl font-semibold tracking-tight">Restful</span>
+            <span className="font-display text-2xl font-semibold tracking-tight">Restivism</span>
           </Link>
         </div>
       </header>

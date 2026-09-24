@@ -1,9 +1,9 @@
-# Restful
+# Restivism
 
 **Rest is resistance.**
 
-Restful is a rest companion for activists and organizers. People who do movement
-work tend to push until they burn out. Restful asks one question, "How is your
+Restivism is a rest companion for activists and organizers. People who do movement
+work tend to push until they burn out. Restivism asks one question, "How is your
 battery?", and gives you a plan to recharge before you run empty.
 
 ## How it works
@@ -32,9 +32,9 @@ to protect it. If you check in at empty, the app plays Taps (you can mute it).
 
 ## Privacy
 
-Restful has no account, no server, and no analytics. Everything (check-ins,
+Restivism has no account, no server, and no analytics. Everything (check-ins,
 sessions, completed quests, and settings) is stored in your browser's
-`localStorage` under the `restful:state` key and never leaves your device.
+`localStorage` under the `restivism:state` key and never leaves your device.
 Clearing site data resets the app.
 
 ## Features
@@ -90,10 +90,10 @@ says.
 The build is a static site. Pushes to `main` deploy to GitHub Pages
 (`.github/workflows/deploy.yml`); `.gitlab-ci.yml` does the same for GitLab Pages.
 
-It is also published to Nostr as a named [nsite](https://nsyte.run), `restful`,
+It is also published to Nostr as a named [nsite](https://nsyte.run), `restivism`,
 configured in `.nsite/config.json` and signed with a bunker:
 
 ```sh
 npm run build
-nsyte deploy dist -d restful -i --skip-secrets-scan
+nsyte deploy dist -d restivism -i --skip-secrets-scan
 ```

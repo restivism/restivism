@@ -3,7 +3,7 @@ import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } fro
 import { type CheckinResult, RestContext, type RestContextType } from '@/contexts/RestContext';
 import { dayKey, DEFAULT_REST_STATE, recentCheckin, type RestState } from '@/lib/rest';
 
-const STORAGE_KEY = 'restful:state';
+const STORAGE_KEY = 'restivism:state';
 
 function loadState(): RestState {
   try {

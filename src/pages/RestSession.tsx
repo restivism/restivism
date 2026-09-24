@@ -35,7 +35,7 @@ function SessionFlow({ recharge }: { recharge: Recharge }) {
   const [session, setSession] = useState<Session>();
   const { completeSession } = useRest();
 
-  useSeoMeta({ title: `${recharge.name} | Restful` });
+  useSeoMeta({ title: `${recharge.name} | Restivism` });
 
   const finish = useCallback((rested: number) => {
     playChime();

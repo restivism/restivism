@@ -10,7 +10,7 @@ import { recentCheckin } from '@/lib/rest';
 
 const Index = () => {
   useSeoMeta({
-    title: 'Restful: how is your battery?',
+    title: 'Restivism: how is your battery?',
     description: 'A rest companion for activists and organizers. Tell us how your battery is, and get a plan to recharge with play time, sleep time, or social time.',
   });
 
