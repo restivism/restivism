@@ -1198,8 +1198,8 @@ function LeaderAlignmentSummary({
             {responses
               .map((response) => response.comment?.trim())
               .filter((comment): comment is string => Boolean(comment))
-              .map((comment) => (
-                <blockquote key={comment} className="rounded-xl bg-secondary/55 px-4 py-3 text-sm leading-relaxed">
+              .map((comment, index) => (
+                <blockquote key={`${index}:${comment}`} className="rounded-xl bg-secondary/55 px-4 py-3 text-sm leading-relaxed">
                   {comment}
                 </blockquote>
               ))}
