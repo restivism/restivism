@@ -52,7 +52,7 @@ export function RechargePlan({ checkin }: { checkin?: EnergyCheckin }) {
 
       {level <= 3 && (
         <Link
-          to="/team?step=cover"
+          to="/team?focus=coverage"
           className="group flex items-center justify-between gap-4 rounded-2xl border border-primary/20 bg-secondary/60 p-4 transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <span>
