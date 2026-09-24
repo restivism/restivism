@@ -2,6 +2,28 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const PBKDF2_ITERATIONS = 150_000;
 
+function getWebCrypto(): Crypto {
+  const webCrypto = globalThis.crypto;
+  if (!webCrypto?.getRandomValues || !webCrypto.subtle) {
+    const insecureHint = globalThis.isSecureContext === false
+      ? ' Open Restivism over HTTPS or use http://localhost when developing.'
+      : '';
+    throw new Error(`Secure browser cryptography is unavailable.${insecureHint}`);
+  }
+  return webCrypto;
+}
+
+function createId(): string {
+  const webCrypto = getWebCrypto();
+  if (typeof webCrypto.randomUUID === 'function') return webCrypto.randomUUID();
+
+  const bytes = webCrypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 export type OrganizationRole = 'leader' | 'member';
 
 export interface OrganizationMembership {
@@ -78,7 +100,8 @@ function decodeEnvelope(inviteCode: string): InviteEnvelope {
 }
 
 async function deriveInviteKey(passcode: string, salt: Uint8Array<ArrayBuffer>): Promise<CryptoKey> {
-  const material = await crypto.subtle.importKey(
+  const webCrypto = getWebCrypto();
+  const material = await webCrypto.subtle.importKey(
     'raw',
     encoder.encode(passcode),
     'PBKDF2',
@@ -86,7 +109,7 @@ async function deriveInviteKey(passcode: string, salt: Uint8Array<ArrayBuffer>):
     ['deriveKey'],
   );
 
-  return crypto.subtle.deriveKey(
+  return webCrypto.subtle.deriveKey(
     {
       name: 'PBKDF2',
       salt,
@@ -105,9 +128,10 @@ async function deriveInviteKey(passcode: string, salt: Uint8Array<ArrayBuffer>):
  * The passcode is not embedded in the invite; it is required to decrypt the org metadata.
  */
 export async function createOrganizationInvite(name: string, passcode: string) {
-  const id = crypto.randomUUID();
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const webCrypto = getWebCrypto();
+  const id = createId();
+  const salt = webCrypto.getRandomValues(new Uint8Array(16));
+  const iv = webCrypto.getRandomValues(new Uint8Array(12));
   const key = await deriveInviteKey(passcode, salt);
 
   const payload: InvitePayload = {
@@ -115,7 +139,7 @@ export async function createOrganizationInvite(name: string, passcode: string) {
     createdAt: Date.now(),
   };
 
-  const encrypted = await crypto.subtle.encrypt(
+  const encrypted = await webCrypto.subtle.encrypt(
     { name: 'AES-GCM', iv },
     key,
     encoder.encode(JSON.stringify(payload)),
@@ -147,7 +171,8 @@ export async function openOrganizationInvite(inviteCode: string, passcode: strin
     const ciphertext = base64UrlToBytes(envelope.ciphertext);
     const key = await deriveInviteKey(passcode, salt);
 
-    const decrypted = await crypto.subtle.decrypt(
+    const webCrypto = getWebCrypto();
+    const decrypted = await webCrypto.subtle.decrypt(
       { name: 'AES-GCM', iv },
       key,
       ciphertext,
@@ -166,7 +191,10 @@ export async function openOrganizationInvite(inviteCode: string, passcode: strin
       name: payload.name,
       createdAt: payload.createdAt,
     };
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('Secure browser cryptography is unavailable.')) {
+      throw error;
+    }
     throw new Error('That invite code and passcode do not match.');
   }
 }
