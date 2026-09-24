@@ -12,6 +12,9 @@ of depending on one person to push through.
 ### My rest
 
 1. **Check in.** Set your battery from 1 (running on fumes) to 5 (fully charged).
+   Or say it out loud: speak for up to 30 seconds and Restivism suggests a level
+   from how your voice sounds — loudness, tone (pitch movement), and emphasis.
+   You confirm the suggestion or tap the level that feels true.
 2. **Get a plan.** Restivism recommends play, sleep, or social time plus a few small
    acts of care.
 3. **Recharge.** Start a timed rest session.
@@ -82,6 +85,9 @@ to Nostr or inventing a weak shared-key sync scheme.
 ## Privacy
 
 - Personal rest state stays in browser `localStorage` under `restivism:state`.
+- Voice check-ins are analysed in the browser with the Web Audio API. Audio is
+  never recorded, stored, or sent, and the words are never transcribed. Only the
+  level the user confirms is saved.
 - Organization rest records are namespaced by organization ID.
 - Organization agreement, coverage, and reflection data are not published to Nostr.
 - There is no analytics, streak system, leaderboard, or individual performance
@@ -92,6 +98,7 @@ to Nostr or inventing a weak shared-key sync scheme.
 ## Features
 
 - Battery check-in with level-matched recharge plans
+- Optional voice check-in measuring loudness, tone, and emphasis on the device
 - Timed play, sleep, and social rest sessions
 - Create or join an organization
 - Leader-created passcode + encrypted organization invite

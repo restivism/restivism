@@ -35,7 +35,7 @@ export interface VoiceReading {
 }
 
 export const FRAME_SECONDS = 0.05;
-export const RECORD_SECONDS = 8;
+export const RECORD_SECONDS = 30;
 /** Less voiced speech than this and we cannot say anything useful. */
 export const MIN_VOICED_SECONDS = 1.5;
 
