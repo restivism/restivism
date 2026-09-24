@@ -767,7 +767,7 @@ function OrganizationWorkspace({
               )}
             </div>
           </div>
-        ) : state.agreement.revision === 0 ? (
+        ) : effectiveAgreement.revision === 0 ? (
           <div className="mt-5 rounded-xl border border-dashed px-5 py-6">
             <p className="font-semibold">The covenant has not been published yet.</p>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -788,9 +788,9 @@ function OrganizationWorkspace({
         ) : (
           <div className="mt-5 space-y-4">
             <div className="rounded-xl bg-secondary/55 p-4">
-              <p className="font-semibold">{agreementSummary(state.agreement)}</p>
-              {state.agreement.note && (
-                <p className="mt-2 text-base text-muted-foreground">“{state.agreement.note}”</p>
+              <p className="font-semibold">{agreementSummary(effectiveAgreement)}</p>
+              {effectiveAgreement.note && (
+                <p className="mt-2 text-base text-muted-foreground">“{effectiveAgreement.note}”</p>
               )}
             </div>
 
@@ -808,23 +808,23 @@ function OrganizationWorkspace({
                 </button>
               )}
               <span className="text-sm text-muted-foreground">
-                Revision {state.agreement.revision}
-                {state.agreement.adoptedAt ? ` · ${new Date(state.agreement.adoptedAt).toLocaleDateString()}` : ''}
+                Revision {effectiveAgreement.revision}
+                {effectiveAgreement.adoptedAt ? ` · ${new Date(effectiveAgreement.adoptedAt).toLocaleDateString()}` : ''}
               </span>
             </div>
 
             {membership.role === 'member' ? (
               <MemberCovenantAlignment
-                key={state.agreement.revision}
+                key={effectiveAgreement.revision}
                 organizationId={membership.id}
                 membershipJoinedAt={membership.joinedAt}
-                revision={state.agreement.revision}
+                revision={effectiveAgreement.revision}
                 onSubmit={submitAlignment}
               />
             ) : (
               <LeaderAlignmentSummary
-                responses={(state.alignmentResponses ?? []).filter(
-                  (response) => response.agreementRevision === state.agreement.revision,
+                responses={orgSync.alignmentResponses.filter(
+                  (response) => response.agreementRevision === effectiveAgreement.revision,
                 )}
               />
             )}
