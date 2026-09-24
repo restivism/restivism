@@ -1,4 +1,4 @@
-import { HeartHandshake, MoonStar, Sprout, Sunrise } from 'lucide-react';
+import { HeartHandshake, Sprout, Sunrise } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 
@@ -9,6 +9,7 @@ import { ENERGY_LEVELS, recentCheckin } from '@/lib/rest';
 import { cn } from '@/lib/utils';
 
 import { BatteryGlyph } from './BatteryControl';
+import { RestGlyph } from './RestGlyph';
 import { ThemeToggle } from './ThemeToggle';
 
 const NAV = [
@@ -34,7 +35,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             className="flex items-center gap-2 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <span className="grid size-9 place-items-center rounded-full bg-gradient-to-br from-primary to-ember text-primary-foreground shadow-sm">
-              <MoonStar className="size-5" aria-hidden />
+              <RestGlyph className="size-6" aria-hidden />
             </span>
             <span className="font-display text-2xl font-semibold tracking-tight">Restful</span>
           </Link>
