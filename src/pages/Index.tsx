@@ -1,5 +1,4 @@
 import { useSeoMeta } from '@unhead/react';
-import { useRef } from 'react';
 
 import { AppShell } from '@/components/rest/AppShell';
 import { BatteryHero } from '@/components/rest/BatteryHero';
@@ -18,24 +17,12 @@ const Index = () => {
   const now = useNow();
   const { state } = useRest();
   const current = recentCheckin(state.checkins, now);
-  const planRef = useRef<HTMLDivElement>(null);
-
-  // On small screens the plan sits below the fold; bring it into view once
-  // the battery has had a moment to fill.
-  const revealPlan = () => {
-    window.setTimeout(() => {
-      const el = planRef.current;
-      if (!el || el.getBoundingClientRect().top < window.innerHeight * 0.7) return;
-      const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
-    }, 450);
-  };
 
   return (
     <AppShell>
-      <BatteryHero now={now} onCheckIn={revealPlan} />
+      <BatteryHero now={now} />
 
-      <div ref={planRef} className="relative mx-auto -mt-10 max-w-3xl scroll-mt-24 space-y-6 px-4 sm:px-6">
+      <div className="relative mx-auto -mt-10 max-w-3xl space-y-6 px-4 sm:px-6">
         <RechargePlan checkin={current} />
         <RestRecord state={state} now={now} />
       </div>

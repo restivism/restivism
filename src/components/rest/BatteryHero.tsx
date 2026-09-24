@@ -105,13 +105,8 @@ function MusicToggle({ muted, onToggle }: { muted: boolean; onToggle: () => void
   );
 }
 
-interface BatteryHeroProps {
-  now: number;
-  onCheckIn?: (level: number) => void;
-}
-
 /** The first thing you see: a giant battery asking how charged you are. */
-export function BatteryHero({ now, onCheckIn }: BatteryHeroProps) {
+export function BatteryHero({ now }: { now: number }) {
   const { state, checkIn, updateSettings } = useRest();
   const muted = !state.settings.music;
   const current = recentCheckin(state.checkins, now);
@@ -123,7 +118,6 @@ export function BatteryHero({ now, onCheckIn }: BatteryHeroProps) {
     if (level === 1 && !muted) playTaps();
     else stopTaps();
     checkIn(level);
-    onCheckIn?.(level);
   };
 
   return (

@@ -33,7 +33,7 @@ export function RechargePlan({ checkin }: { checkin?: EnergyCheckin }) {
       <div className="space-y-2">
         <p className={cn('flex items-center gap-2 text-sm font-bold uppercase tracking-widest', LEVEL_TEXT[level])}>
           <BatteryGlyph level={level} />
-          Your plan &middot; {ENERGY_LEVELS[level - 1].short}
+          {ENERGY_LEVELS[level - 1].short}
         </p>
         <h2 id="plan-heading" className="text-3xl font-semibold leading-tight sm:text-4xl">
           {plan.headline}
