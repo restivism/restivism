@@ -30,6 +30,7 @@ import {
   agreementSummary,
   createDemoOrganizationRestState,
   DEFAULT_ORGANIZATION_REST_STATE,
+  type AlignmentScore,
   type CoverageItem,
   type OrganizationRestState,
   type PulseAnswer,
@@ -37,6 +38,14 @@ import {
 import { cn } from '@/lib/utils';
 
 const DIRECTORY_KEY = 'restivism:organizations';
+const ALIGNMENT_LEVELS: ReadonlyArray<{ score: AlignmentScore; emoji: string; label: string }> = [
+  { score: 1, emoji: '😟', label: 'Not aligned' },
+  { score: 2, emoji: '😕', label: 'Some concerns' },
+  { score: 3, emoji: '🤔', label: 'Unsure' },
+  { score: 4, emoji: '🙂', label: 'Mostly aligned' },
+  { score: 5, emoji: '🤝', label: 'Fully aligned' },
+];
+const ALIGNMENT_PRIVACY_THRESHOLD = 3;
 
 function localDateValue() {
   const now = new Date();
@@ -431,7 +440,9 @@ function OrganizationWorkspace({
   );
 
   const coverageRef = useRef<HTMLElement>(null);
-  const [editingAgreement, setEditingAgreement] = useState(state.agreement.revision === 0);
+  const [editingAgreement, setEditingAgreement] = useState(
+    membership.role === 'leader' && state.agreement.revision === 0,
+  );
   const [agreementDraft, setAgreementDraft] = useState(state.agreement);
   const [restingPerson, setRestingPerson] = useState(membership.alias);
   const [work, setWork] = useState('');
@@ -452,6 +463,11 @@ function OrganizationWorkspace({
   }, [requestedFocus]);
 
   const saveAgreement = () => {
+    if (membership.role !== 'leader') {
+      setMessage('Only an organization leader can change the rest agreement.');
+      return;
+    }
+
     setState((previous) => ({
       ...previous,
       agreement: {
@@ -468,6 +484,8 @@ function OrganizationWorkspace({
   const toggleAgreementPromise = (
     field: 'protectedRest' | 'acceptedCoverage' | 'pauseWhenFull',
   ) => {
+    if (membership.role !== 'leader') return;
+
     setAgreementDraft((previous) => ({
       ...previous,
       [field]: !previous[field],
@@ -532,6 +550,32 @@ function OrganizationWorkspace({
       ...previous,
       coverage: previous.coverage.filter((item) => item.id !== itemId),
     }));
+  };
+
+  const submitAlignment = (score: AlignmentScore, responseId: string) => {
+    if (membership.role !== 'member' || state.agreement.revision === 0) return;
+
+    setState((previous) => {
+      const responses = previous.alignmentResponses ?? [];
+      const response = {
+        id: responseId,
+        agreementRevision: previous.agreement.revision,
+        score,
+        recordedAt: Date.now(),
+      };
+
+      return {
+        ...previous,
+        alignmentResponses: [
+          ...responses.filter((item) => !(
+            item.id === responseId &&
+            item.agreementRevision === previous.agreement.revision
+          )),
+          response,
+        ],
+      };
+    });
+    setMessage('Your covenant alignment was recorded anonymously in the organization data.');
   };
 
   const recordPulse = (answer: PulseAnswer) => {
@@ -642,14 +686,14 @@ function OrganizationWorkspace({
           </span>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-bold uppercase tracking-widest text-muted-foreground">1 · Agree</p>
-            <h2 className="text-2xl font-semibold">Our rest agreement</h2>
+            <h2 className="text-2xl font-semibold">Our rest covenant</h2>
             <p className="text-base text-muted-foreground">
-              A simple covenant: three promises the team can actually remember.
+              Leaders steward the covenant. Members can say how aligned they feel without attaching their name.
             </p>
           </div>
         </div>
 
-        {editingAgreement ? (
+        {membership.role === 'leader' && editingAgreement ? (
           <div className="mt-5 space-y-4">
             <AgreementPromise
               checked={agreementDraft.protectedRest}
@@ -671,7 +715,9 @@ function OrganizationWorkspace({
             />
 
             <label className="block space-y-2">
-              <span className="font-semibold">One sentence in your own words <span className="font-normal text-muted-foreground">(optional)</span></span>
+              <span className="font-semibold">
+                One sentence in your own words <span className="font-normal text-muted-foreground">(optional)</span>
+              </span>
               <input
                 value={agreementDraft.note}
                 onChange={(event) => setAgreementDraft((previous) => ({ ...previous, note: event.target.value }))}
@@ -688,7 +734,7 @@ function OrganizationWorkspace({
                 className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 font-semibold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <Check className="size-4" aria-hidden />
-                Save agreement
+                Publish covenant
               </button>
               {state.agreement.revision > 0 && (
                 <button
@@ -704,6 +750,24 @@ function OrganizationWorkspace({
               )}
             </div>
           </div>
+        ) : state.agreement.revision === 0 ? (
+          <div className="mt-5 rounded-xl border border-dashed px-5 py-6">
+            <p className="font-semibold">The covenant has not been published yet.</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {membership.role === 'leader'
+                ? 'Create the first covenant so members have something concrete to align around.'
+                : 'An organization leader needs to publish the covenant first.'}
+            </p>
+            {membership.role === 'leader' && (
+              <button
+                type="button"
+                onClick={() => setEditingAgreement(true)}
+                className="mt-4 rounded-full bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                Create covenant
+              </button>
+            )}
+          </div>
         ) : (
           <div className="mt-5 space-y-4">
             <div className="rounded-xl bg-secondary/55 p-4">
@@ -712,22 +776,41 @@ function OrganizationWorkspace({
                 <p className="mt-2 text-base text-muted-foreground">“{state.agreement.note}”</p>
               )}
             </div>
+
             <div className="flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setAgreementDraft(state.agreement);
-                  setEditingAgreement(true);
-                }}
-                className="rounded-full border px-4 py-2 text-sm font-bold hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                Edit agreement
-              </button>
+              {membership.role === 'leader' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAgreementDraft(state.agreement);
+                    setEditingAgreement(true);
+                  }}
+                  className="rounded-full border px-4 py-2 text-sm font-bold hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  Edit covenant
+                </button>
+              )}
               <span className="text-sm text-muted-foreground">
                 Revision {state.agreement.revision}
                 {state.agreement.adoptedAt ? ` · ${new Date(state.agreement.adoptedAt).toLocaleDateString()}` : ''}
               </span>
             </div>
+
+            {membership.role === 'member' ? (
+              <MemberCovenantAlignment
+                key={state.agreement.revision}
+                organizationId={membership.id}
+                membershipJoinedAt={membership.joinedAt}
+                revision={state.agreement.revision}
+                onSubmit={submitAlignment}
+              />
+            ) : (
+              <LeaderAlignmentSummary
+                responses={(state.alignmentResponses ?? []).filter(
+                  (response) => response.agreementRevision === state.agreement.revision,
+                )}
+              />
+            )}
           </div>
         )}
       </section>
@@ -955,6 +1038,136 @@ function OrganizationWorkspace({
       <p className="text-sm leading-relaxed text-muted-foreground">
         Organization data is separated by organization ID in this browser. This branch does not yet synchronize agreements,
         coverage, or reflections between devices, so it should be treated as a local-first prototype rather than server-enforced authorization.
+      </p>
+    </div>
+  );
+}
+
+function MemberCovenantAlignment({
+  organizationId,
+  membershipJoinedAt,
+  revision,
+  onSubmit,
+}: {
+  organizationId: string;
+  membershipJoinedAt: number;
+  revision: number;
+  onSubmit: (score: AlignmentScore, responseId: string) => void;
+}) {
+  const storagePrefix = `restivism:alignment:${organizationId}:${membershipJoinedAt}:r${revision}`;
+  const [savedScore, setSavedScore] = useLocalStorage<number>(`${storagePrefix}:score`, 0);
+  const [responseId, setResponseId] = useLocalStorage<string>(`${storagePrefix}:id`, crypto.randomUUID());
+  const [draftScore, setDraftScore] = useState<AlignmentScore>(
+    savedScore >= 1 && savedScore <= 5 ? savedScore as AlignmentScore : 3,
+  );
+
+  const selected = ALIGNMENT_LEVELS.find((level) => level.score === draftScore) ?? ALIGNMENT_LEVELS[2];
+
+  const submit = () => {
+    setSavedScore(draftScore);
+    setResponseId(responseId);
+    onSubmit(draftScore, responseId);
+  };
+
+  return (
+    <div className="rounded-2xl border bg-background/60 p-4 sm:p-5">
+      <div className="space-y-1">
+        <p className="font-semibold">How aligned do you feel with this covenant?</p>
+        <p className="text-sm text-muted-foreground">
+          Your name or alias is not stored with this response. You can update it anytime while this revision is current.
+        </p>
+      </div>
+
+      <div className="mt-5 text-center" aria-live="polite">
+        <div className="text-5xl" aria-hidden>{selected.emoji}</div>
+        <p className="mt-2 font-semibold">{selected.label}</p>
+      </div>
+
+      <label className="mt-5 block">
+        <span className="sr-only">Covenant alignment from 1 to 5</span>
+        <input
+          type="range"
+          min="1"
+          max="5"
+          step="1"
+          value={draftScore}
+          onChange={(event) => setDraftScore(Number(event.target.value) as AlignmentScore)}
+          className="w-full accent-primary"
+          aria-valuetext={selected.label}
+        />
+      </label>
+
+      <div className="mt-1 flex justify-between text-xl" aria-hidden>
+        {ALIGNMENT_LEVELS.map((level) => <span key={level.score}>{level.emoji}</span>)}
+      </div>
+
+      <button
+        type="button"
+        onClick={submit}
+        className="mt-5 rounded-full bg-primary px-5 py-2.5 font-semibold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        {savedScore ? 'Update my anonymous response' : 'Share anonymously'}
+      </button>
+    </div>
+  );
+}
+
+function LeaderAlignmentSummary({
+  responses,
+}: {
+  responses: Array<{ score: AlignmentScore; recordedAt: number }>;
+}) {
+  const count = responses.length;
+
+  if (count < ALIGNMENT_PRIVACY_THRESHOLD) {
+    return (
+      <div className="rounded-2xl border border-dashed p-4">
+        <p className="font-semibold">Anonymous covenant alignment</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {count === 0 ? 'No member responses yet.' : `${count} anonymous response${count === 1 ? '' : 's'} received.`}
+          {' '}Results appear after at least {ALIGNMENT_PRIVACY_THRESHOLD} responses to reduce the chance of identifying an individual response.
+        </p>
+      </div>
+    );
+  }
+
+  const average = responses.reduce((sum, response) => sum + response.score, 0) / count;
+  const rounded = Math.max(1, Math.min(5, Math.round(average))) as AlignmentScore;
+  const summary = ALIGNMENT_LEVELS.find((level) => level.score === rounded) ?? ALIGNMENT_LEVELS[2];
+
+  return (
+    <div className="rounded-2xl border bg-background/60 p-4 sm:p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="font-semibold">Anonymous covenant alignment</p>
+          <p className="text-sm text-muted-foreground">{count} responses · current revision only</p>
+        </div>
+        <div className="text-right">
+          <span className="text-3xl" aria-hidden>{summary.emoji}</span>
+          <p className="text-sm font-semibold">{average.toFixed(1)} / 5</p>
+        </div>
+      </div>
+
+      <div className="mt-4 space-y-2">
+        {ALIGNMENT_LEVELS.map((level) => {
+          const levelCount = responses.filter((response) => response.score === level.score).length;
+          const percent = Math.round((levelCount / count) * 100);
+
+          return (
+            <div key={level.score} className="grid grid-cols-[2rem_1fr_3rem] items-center gap-2 text-sm">
+              <span aria-hidden>{level.emoji}</span>
+              <div className="h-2 overflow-hidden rounded-full bg-secondary">
+                <div className="h-full rounded-full bg-primary" style={{ width: `${percent}%` }} />
+              </div>
+              <span className="text-right text-muted-foreground">{percent}%</span>
+              <span className="sr-only">{level.label}: {levelCount} responses</span>
+            </div>
+          );
+        })}
+      </div>
+
+      <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
+        The leader view never displays member names with ratings. This local-first prototype does not yet provide cryptographic anonymity across devices.
       </p>
     </div>
   );
