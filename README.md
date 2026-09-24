@@ -2,98 +2,140 @@
 
 **Rest is resistance.**
 
-Restivism is a rest companion for activists and organizers. People who do movement
-work tend to push until they burn out. Restivism asks one question, "How is your
-battery?", and gives you a plan to recharge before you run empty.
+Restivism is a rest companion for activists and organizers. It keeps the original
+personal loop — check your battery, get a recharge plan, rest, and check in again —
+and adds a simple organization layer so rest can be protected by the group instead
+of depending on one person to push through.
 
 ## How it works
 
+### My rest
+
 1. **Check in.** Set your battery from 1 (running on fumes) to 5 (fully charged).
-   The hero art and colors change to match.
-2. **Get a plan.** Each level has its own plan: one recharge to do first, two
-   alternatives if that one isn't possible right now, and three small care quests
-   to tick off for the day.
-3. **Recharge.** Start a timed session of one of three kinds:
+2. **Get a plan.** Restivism recommends play, sleep, or social time plus a few small
+   acts of care.
+3. **Recharge.** Start a timed rest session.
+4. **Check in again.** See how your battery changed.
 
-   | Recharge        | What it is                                           | Lengths (min) |
-   | --------------- | ---------------------------------------------------- | ------------- |
-   | **Play time**   | Something purely for fun. It doesn't have to be useful. | 15, 30, 60    |
-   | **Sleep time**  | Lie down; a soft chime wakes you at the end.        | 20, 30, 90    |
-   | **Social time** | Time with someone you like, not talking about the work. | 15, 30, 60    |
+When a battery is low or middling, the plan can send the user directly to their
+organization's coverage area so the team can make room for the rest.
 
-   While the timer runs, gentle prompts rotate every minute. You can pause, or end
-   early and still get credit for the minutes you rested.
-4. **Check in again.** When the session ends, report your battery a second time so
-   you can see what the rest did for you.
+### Organization rest
 
-The plans lean on rest harder the lower you are: an empty battery gets 90 minutes
-of sleep and a nudge to cancel something, while a full battery gets encouragement
-to protect it. If you check in at empty, the app plays Taps (you can mute it).
+The optional `/team` area now begins with an organization gate.
+
+**Organization leaders**:
+1. Create an organization.
+2. Choose their name or alias.
+3. Create a passcode.
+4. Share the generated invite code and the passcode separately.
+
+**Members**:
+1. Paste the organization invite code.
+2. Enter the leader-created passcode.
+3. Choose the name or alias they want to use.
+
+The passcode is not stored inside the invite code. The invite metadata is encrypted
+in the browser with a key derived from the passcode using PBKDF2-SHA-256 and
+AES-256-GCM.
+
+Once inside an organization, the experience is deliberately small:
+
+1. **Agree — Our rest agreement.** A simple covenant with three memorable promises:
+   rest time is protected; coverage only counts when accepted; and when nobody has
+   capacity, nonessential work can wait. Organizations may add one short sentence
+   in their own words.
+2. **Cover — Make room for the rest.** Record who is resting, what needs attention,
+   the day, and either who can cover or that the work should pause. A coverage
+   request stays **Waiting** until someone marks it accepted.
+3. **Reflect — Did our rest plan hold?** One shared organization answer:
+   **Yes / Partly / No**. This is not an individual wellness score.
+
+The coverage form has one optional handoff note instead of a multi-field handover.
+
+## Organization data boundaries
+
+Each organization gets a different local storage namespace:
+
+```
+restivism:organization:<organization-id>:rest
+```
+
+The UI only loads the current organization's agreement, coverage, and reflection.
+Switching organizations switches the visible data set.
+
+Organization membership is stored separately in `restivism:organizations`.
+Leaving an organization removes that membership from the app on that device; the
+invite + passcode are required to join it again.
+
+### Current prototype limitation
+
+The invite + passcode can be used to join the same organization identity on another
+device, but this branch does **not yet synchronize organization data between
+devices**. Agreements, coverage, and reflections are currently local-first browser
+data, not server-enforced authorization.
+
+That distinction is intentional for this iteration: the organization UX and data
+isolation model can be tested without publishing sensitive operational information
+to Nostr or inventing a weak shared-key sync scheme.
 
 ## Privacy
 
-Restivism has no account, no server, and no analytics. Everything (check-ins,
-sessions, completed quests, and settings) is stored in your browser's
-`localStorage` under the `restivism:state` key and never leaves your device.
-Clearing site data resets the app.
+- Personal rest state stays in browser `localStorage` under `restivism:state`.
+- Organization rest records are namespaced by organization ID.
+- Organization agreement, coverage, and reflection data are not published to Nostr.
+- There is no analytics, streak system, leaderboard, or individual performance
+  ranking.
+- Browser storage itself is not encrypted. Sensitive case details, passwords,
+  beneficiary identities, or precise sensitive locations should not be entered.
 
 ## Features
 
-- Battery check-in with level-matched artwork and a plan for each level
-- Session timer that uses wall-clock time, so it stays accurate when the tab is in
-  the background
-- Screen wake lock during sessions (where the browser supports it)
-- Chime and Taps synthesized with the Web Audio API, with no audio files
-- Custom session lengths via `/rest/:recharge?m=<minutes>` (up to 180)
-- Syncs state across open tabs
-- Respects `prefers-reduced-motion`; keyboard and screen-reader friendly
-- Installable as a web app via the manifest
+- Battery check-in with level-matched recharge plans
+- Timed play, sleep, and social rest sessions
+- Create or join an organization
+- Leader-created passcode + encrypted organization invite
+- Multiple organizations on one device with explicit organization switching
+- Simple three-promise rest agreement / covenant
+- Simple coverage request with **Waiting / Covered / Paused**
+- Explicit acceptance before coverage counts
+- Pause-work path when nobody has capacity
+- One optional handoff note
+- One organization-level reflection
+- Fictional Cedar / Birch demo data
+- No gamification or individual wellness scoring
+- Keyboard and screen-reader friendly
+- Installable web app
 
 ## Development
 
 Requires Node.js 22 or newer.
 
 ```sh
-npm run dev     # start the Vite dev server
-npm run build   # production build into dist/
-npm run test    # type check, lint, unit tests, and build
+npm run dev
+npm run build
+npm run test
 ```
 
-Run `npm run test` before committing; it must pass.
-
-### Stack
-
-React 19, TypeScript, Vite, Tailwind CSS 4, shadcn/ui on Radix, React Router, and
-TanStack Query. The project is built on [MKStack](https://soapbox.pub/mkstack), so
-Nostr plumbing (Nostrify, login, relay config) is present, though the app does not
-currently publish or read anything from Nostr.
+Run `npm run test` before merging.
 
 ### Layout
 
 ```
 src/
-├── lib/rest.ts              # Recharges, battery levels, per-level plans, state types
-├── lib/taps.ts, chime.ts    # Web Audio synthesis
-├── components/RestProvider.tsx  # localStorage-backed app state
-├── components/rest/         # Battery hero, plan, check-in, progress ring, shell
+├── lib/rest.ts                  # Personal recharge plans and state
+├── lib/organization.ts          # Passcode-protected organization invites
+├── lib/teamRest.ts              # Simplified org agreement, coverage, reflection
+├── components/RestProvider.tsx
+├── components/rest/
 └── pages/
-    ├── Index.tsx            # Check-in and plan
-    └── RestSession.tsx      # /rest/:practiceId timer flow
+    ├── Index.tsx
+    ├── RestSession.tsx
+    └── TeamRest.tsx             # Organization gate + organization rest workspace
 ```
-
-The copy for every plan, recharge, prompt, and care quest lives in
-`src/lib/rest.ts`. That is the place to edit if you want to change what the app
-says.
 
 ## Deployment
 
 The build is a static site. Pushes to `main` deploy to GitHub Pages
-(`.github/workflows/deploy.yml`); `.gitlab-ci.yml` does the same for GitLab Pages.
-
-It is also published to Nostr as a named [nsite](https://nsyte.run), `restivism`,
-configured in `.nsite/config.json` and signed with a bunker:
-
-```sh
-npm run build
-nsyte deploy dist -d restivism -i --skip-secrets-scan
-```
+(`.github/workflows/deploy.yml`). It is also published to Nostr as the named
+nsite `restivism`.
