@@ -1,3 +1,5 @@
+import { generateSecretKey, getPublicKey } from 'nostr-tools/pure';
+
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const PBKDF2_ITERATIONS = 150_000;
@@ -32,6 +34,14 @@ export interface OrganizationMembership {
   alias: string;
   role: OrganizationRole;
   joinedAt: number;
+  /** Shared organization encryption key, delivered inside the passcode-protected invite. */
+  syncKey?: string;
+  /** Public key that is allowed to publish leader-owned organization state. */
+  leaderPubkey?: string;
+  /** Only present for leaders; never included in member invites. */
+  leaderSecretKey?: string;
+  /** Anonymous per-membership signing key for alignment and restfulness submissions. */
+  memberSecretKey?: string;
   /** Leaders keep the encrypted invite so they can share it again. */
   inviteCode?: string;
 }
@@ -58,6 +68,12 @@ interface InviteEnvelope {
 interface InvitePayload {
   name: string;
   createdAt: number;
+  syncKey: string;
+  leaderPubkey: string;
+}
+
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 function bytesToBase64Url(bytes: Uint8Array): string {
@@ -130,6 +146,9 @@ async function deriveInviteKey(passcode: string, salt: Uint8Array<ArrayBuffer>):
 export async function createOrganizationInvite(name: string, passcode: string) {
   const webCrypto = getWebCrypto();
   const id = createId();
+  const leaderSecret = generateSecretKey();
+  const memberSecret = generateSecretKey();
+  const syncKey = webCrypto.getRandomValues(new Uint8Array(32));
   const salt = webCrypto.getRandomValues(new Uint8Array(16));
   const iv = webCrypto.getRandomValues(new Uint8Array(12));
   const key = await deriveInviteKey(passcode, salt);
@@ -137,6 +156,8 @@ export async function createOrganizationInvite(name: string, passcode: string) {
   const payload: InvitePayload = {
     name: name.trim(),
     createdAt: Date.now(),
+    syncKey: bytesToBase64Url(syncKey),
+    leaderPubkey: getPublicKey(leaderSecret),
   };
 
   const encrypted = await webCrypto.subtle.encrypt(
@@ -158,6 +179,10 @@ export async function createOrganizationInvite(name: string, passcode: string) {
       id,
       name: payload.name,
       createdAt: payload.createdAt,
+      syncKey: payload.syncKey,
+      leaderPubkey: payload.leaderPubkey,
+      leaderSecretKey: bytesToHex(leaderSecret),
+      memberSecretKey: bytesToHex(memberSecret),
     },
     inviteCode,
   };
@@ -182,7 +207,12 @@ export async function openOrganizationInvite(inviteCode: string, passcode: strin
     if (!parsed || typeof parsed !== 'object') throw new Error('Invalid organization invite.');
     const payload = parsed as Partial<InvitePayload>;
 
-    if (typeof payload.name !== 'string' || typeof payload.createdAt !== 'number') {
+    if (
+      typeof payload.name !== 'string' ||
+      typeof payload.createdAt !== 'number' ||
+      typeof payload.syncKey !== 'string' ||
+      typeof payload.leaderPubkey !== 'string'
+    ) {
       throw new Error('Invalid organization invite.');
     }
 
@@ -190,6 +220,9 @@ export async function openOrganizationInvite(inviteCode: string, passcode: strin
       id: envelope.id,
       name: payload.name,
       createdAt: payload.createdAt,
+      syncKey: payload.syncKey,
+      leaderPubkey: payload.leaderPubkey,
+      memberSecretKey: bytesToHex(generateSecretKey()),
     };
   } catch (error) {
     if (error instanceof Error && error.message.startsWith('Secure browser cryptography is unavailable.')) {
