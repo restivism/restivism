@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { useRest } from '@/hooks/useRest';
 
 import { BatteryControl } from './BatteryControl';
+import { HeroWeather } from './HeroWeather';
 import { VoiceCheckin } from './VoiceCheckin';
 
 function greeting(hour: number): string {
@@ -56,7 +57,7 @@ function HeroBackdrop({ level }: { level?: number }) {
   if (level && !seen.includes(level)) setSeen([...seen, level]);
 
   return (
-    <div className="absolute inset-0 -z-10" aria-hidden>
+    <div className="absolute inset-0 -z-10 motion-safe:animate-drift" aria-hidden>
       <img
         src="/dusk.webp"
         alt=""
@@ -129,6 +130,7 @@ export function BatteryHero({ now, onCheckIn }: BatteryHeroProps) {
     <section aria-labelledby="battery-heading" className="relative isolate overflow-hidden">
       <HeroBackdrop level={current?.level} />
       <div className="absolute inset-0 -z-10 bg-gradient-to-b from-[hsl(250_45%_10%/0.45)] via-[hsl(250_45%_10%/0.55)] to-background" />
+      <HeroWeather level={current?.level} />
       {current && (
         <div
           className={cn(

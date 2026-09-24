@@ -1,94 +1,14 @@
-import { useEffect, useRef } from 'react';
-
 import type { RechargeId } from '@/lib/rest';
+import { glow, rand, type Scene, spawnMany } from '@/lib/scene';
+
+import { SceneCanvas } from './SceneCanvas';
 
 /**
  * A slow, generative backdrop for a rest session, drawn on a canvas:
  * stars for sleep, drifting kites of color for play, warm lanterns for social.
- * Draws one still frame when the user prefers reduced motion.
  */
 export function RestScene({ recharge, paused = false }: { recharge: RechargeId; paused?: boolean }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const pausedRef = useRef(paused);
-
-  useEffect(() => {
-    pausedRef.current = paused;
-  }, [paused]);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const ctx = canvas?.getContext('2d');
-    if (!canvas || !ctx) return;
-
-    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    let width = 0;
-    let height = 0;
-    let particles: Particle[] = [];
-
-    const resize = () => {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      width = canvas.clientWidth;
-      height = canvas.clientHeight;
-      canvas.width = Math.round(width * dpr);
-      canvas.height = Math.round(height * dpr);
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      particles = SCENES[recharge].spawn(width, height);
-    };
-
-    resize();
-    const observer = new ResizeObserver(resize);
-    observer.observe(canvas);
-
-    let frame = 0;
-    let last = performance.now();
-    let t = 0;
-    const draw = (now: number) => {
-      const dt = Math.min(0.05, (now - last) / 1000);
-      last = now;
-      if (!pausedRef.current) t += dt;
-      ctx.clearRect(0, 0, width, height);
-      SCENES[recharge].draw(ctx, particles, t, pausedRef.current ? 0 : dt, width, height);
-      if (!reduce) frame = requestAnimationFrame(draw);
-    };
-    frame = requestAnimationFrame(draw);
-
-    return () => {
-      cancelAnimationFrame(frame);
-      observer.disconnect();
-    };
-  }, [recharge]);
-
-  return <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" aria-hidden />;
-}
-
-interface Particle {
-  x: number;
-  y: number;
-  r: number;
-  /** Speed, phase, and hue: meaning varies per scene. */
-  v: number;
-  p: number;
-  h: number;
-}
-
-interface Scene {
-  spawn: (w: number, h: number) => Particle[];
-  draw: (ctx: CanvasRenderingContext2D, ps: Particle[], t: number, dt: number, w: number, h: number) => void;
-}
-
-const rand = (a: number, b: number) => a + Math.random() * (b - a);
-
-function spawnMany(n: number, make: () => Particle): Particle[] {
-  return Array.from({ length: n }, make);
-}
-
-/** A soft radial glow, the building block of every scene. */
-function glow(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, color: string, alpha: number) {
-  const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-  g.addColorStop(0, `hsla(${color} / ${alpha})`);
-  g.addColorStop(1, `hsla(${color} / 0)`);
-  ctx.fillStyle = g;
-  ctx.fillRect(x - r, y - r, r * 2, r * 2);
+  return <SceneCanvas scene={SCENES[recharge]} paused={paused} />;
 }
 
 let shooting: { x: number; y: number; life: number } | undefined;
