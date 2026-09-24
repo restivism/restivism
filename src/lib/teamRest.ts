@@ -1,31 +1,23 @@
-// Privacy guideline: team-rest records stay local by default and are never published to Nostr.
-export type AgreementFrame = 'movement' | 'secular' | 'faith';
-export type CoverageStatus = 'proposed' | 'accepted' | 'needs-change' | 'paused';
-export type PulseAnswer = 'yes' | 'partly' | 'no' | 'prefer-not';
+export type CoverageStatus = 'waiting' | 'covered' | 'paused';
+export type PulseAnswer = 'yes' | 'partly' | 'no';
 
-export interface TeamAgreement {
-  frame: AgreementFrame;
-  text: string;
+export interface RestAgreement {
+  protectedRest: boolean;
+  acceptedCoverage: boolean;
+  pauseWhenFull: boolean;
+  note: string;
   revision: number;
   adoptedAt?: number;
 }
 
-export interface HandoverNote {
-  currentStatus: string;
-  nextAction: string;
-  limit: string;
-  reference: string;
-}
-
 export interface CoverageItem {
   id: string;
-  responsibility: string;
-  restingAlias: string;
-  coveringAlias?: string;
-  startsAt: number;
-  endsAt: number;
+  restingPerson: string;
+  work: string;
+  coveringPerson?: string;
+  date: string;
+  note: string;
   status: CoverageStatus;
-  handover: HandoverNote;
 }
 
 export interface TeamPulse {
@@ -33,109 +25,72 @@ export interface TeamPulse {
   recordedAt: number;
 }
 
-export interface TeamRestState {
-  version: 1;
-  aliases: string[];
-  agreement: TeamAgreement;
+export interface OrganizationRestState {
+  version: 2;
+  agreement: RestAgreement;
   coverage: CoverageItem[];
   pulse?: TeamPulse;
 }
 
-export const AGREEMENT_STARTER =
-  'We protect planned rest. Coverage only counts when the receiving person accepts it. ' +
-  'If nobody has capacity, we pause, reduce, or postpone nonessential work instead of pulling someone back from rest.';
+export const DEFAULT_REST_AGREEMENT: RestAgreement = {
+  protectedRest: true,
+  acceptedCoverage: true,
+  pauseWhenFull: true,
+  note: '',
+  revision: 0,
+};
 
-export const DEFAULT_TEAM_REST_STATE: TeamRestState = {
-  version: 1,
-  aliases: [],
-  agreement: {
-    frame: 'movement',
-    text: AGREEMENT_STARTER,
-    revision: 0,
-  },
+export const DEFAULT_ORGANIZATION_REST_STATE: OrganizationRestState = {
+  version: 2,
+  agreement: DEFAULT_REST_AGREEMENT,
   coverage: [],
 };
 
-export function overlaps(
-  a: Pick<CoverageItem, 'startsAt' | 'endsAt'>,
-  b: Pick<CoverageItem, 'startsAt' | 'endsAt'>,
-) {
-  return a.startsAt < b.endsAt && b.startsAt < a.endsAt;
+export function agreementSummary(agreement: RestAgreement) {
+  const promises = [
+    agreement.protectedRest && 'Rest time is protected',
+    agreement.acceptedCoverage && 'Coverage only counts when someone accepts it',
+    agreement.pauseWhenFull && 'If nobody has capacity, nonessential work waits',
+  ].filter(Boolean);
+
+  return promises.join(' · ');
 }
 
-export function hasAcceptedCoverageConflict(items: CoverageItem[], candidate: CoverageItem): boolean {
-  if (!candidate.coveringAlias) return false;
-
-  return items.some((item) => (
-    item.id !== candidate.id &&
-    item.status === 'accepted' &&
-    item.coveringAlias === candidate.coveringAlias &&
-    overlaps(item, candidate)
-  ));
-}
-
-export function createDemoTeamRestState(now = Date.now()): TeamRestState {
-  const hour = 60 * 60 * 1000;
-  const day = 24 * hour;
+export function createDemoOrganizationRestState(): OrganizationRestState {
+  const today = new Date().toISOString().slice(0, 10);
 
   return {
-    version: 1,
-    aliases: ['Cedar', 'Birch', 'Ash'],
+    version: 2,
     agreement: {
-      frame: 'movement',
-      text: AGREEMENT_STARTER,
+      protectedRest: true,
+      acceptedCoverage: true,
+      pauseWhenFull: true,
+      note: 'We protect rest without making someone else silently carry too much.',
       revision: 1,
-      adoptedAt: now - day,
+      adoptedAt: Date.now(),
     },
     coverage: [
       {
         id: crypto.randomUUID(),
-        responsibility: 'Community contact',
-        restingAlias: 'Cedar',
-        coveringAlias: 'Birch',
-        startsAt: now + hour,
-        endsAt: now + 5 * hour,
-        status: 'accepted',
-        handover: {
-          currentStatus: 'Inbox is clear through this morning.',
-          nextAction: 'Reply only to time-sensitive community questions.',
-          limit: 'Anything else waits until Cedar returns.',
-          reference: 'Use the team contact notes already on your device.',
-        },
+        restingPerson: 'Cedar',
+        work: 'Community contact',
+        coveringPerson: 'Birch',
+        date: today,
+        note: 'Urgent replies only. Everything else can wait.',
+        status: 'covered',
       },
       {
         id: crypto.randomUUID(),
-        responsibility: 'Public updates',
-        restingAlias: 'Cedar',
-        coveringAlias: 'Ash',
-        startsAt: now + hour,
-        endsAt: now + 5 * hour,
-        status: 'accepted',
-        handover: {
-          currentStatus: 'No scheduled announcement is due.',
-          nextAction: 'Post only if an already-approved update becomes necessary.',
-          limit: 'Do not draft new campaign language.',
-          reference: 'Use the approved-message folder.',
-        },
-      },
-      {
-        id: crypto.randomUUID(),
-        responsibility: 'Planning meeting',
-        restingAlias: 'Cedar',
-        startsAt: now + 2 * hour,
-        endsAt: now + 3 * hour,
+        restingPerson: 'Cedar',
+        work: 'Planning meeting',
+        date: today,
+        note: 'No one has capacity, so the meeting moves.',
         status: 'paused',
-        handover: {
-          currentStatus: '',
-          nextAction: '',
-          limit: 'Postponed because nobody has capacity.',
-          reference: '',
-        },
       },
     ],
     pulse: {
       answer: 'partly',
-      recordedAt: now - day,
+      recordedAt: Date.now(),
     },
   };
 }
