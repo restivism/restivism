@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { useRest } from '@/hooks/useRest';
 
 import { BatteryControl } from './BatteryControl';
+import { VoiceCheckin } from './VoiceCheckin';
 
 function greeting(hour: number): string {
   if (hour < 5) return 'Still up?';
@@ -117,6 +118,13 @@ export function BatteryHero({ now, onCheckIn }: BatteryHeroProps) {
   const lastSession = state.sessions[state.sessions.length - 1];
   const reading = current ? ENERGY_LEVELS[current.level - 1] : undefined;
 
+  const handleLevel = (level: number) => {
+    if (level === 1 && !muted) playTaps();
+    else stopTaps();
+    checkIn(level);
+    onCheckIn?.(level);
+  };
+
   return (
     <section aria-labelledby="battery-heading" className="relative isolate overflow-hidden">
       <HeroBackdrop level={current?.level} />
@@ -150,12 +158,7 @@ export function BatteryHero({ now, onCheckIn }: BatteryHeroProps) {
 
         <BatteryControl
           value={current?.level}
-          onChange={(level) => {
-            if (level === 1 && !muted) playTaps();
-            else stopTaps();
-            checkIn(level);
-            onCheckIn?.(level);
-          }}
+          onChange={handleLevel}
           onDark
           label="How charged do you feel right now?"
           className="mt-10 sm:mt-12"
@@ -164,6 +167,8 @@ export function BatteryHero({ now, onCheckIn }: BatteryHeroProps) {
         <p className="mt-6 min-h-9 font-display text-3xl font-semibold text-white" aria-live="polite">
           {reading ? reading.label : '\u00a0'}
         </p>
+
+        <VoiceCheckin onUse={handleLevel} />
       </div>
     </section>
   );
