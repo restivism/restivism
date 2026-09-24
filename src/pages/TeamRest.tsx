@@ -1008,7 +1008,7 @@ function OrganizationWorkspace({
         )}
       </section>
 
-      {state.agreement.revision === 0 && state.coverage.length === 0 && (
+      {membership.role === 'leader' && state.agreement.revision === 0 && state.coverage.length === 0 && (
         <button
           type="button"
           onClick={loadDemo}
