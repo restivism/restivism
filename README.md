@@ -108,8 +108,10 @@ to Nostr or inventing a weak shared-key sync scheme.
 - Optional anonymous free-text covenant feedback, shown to leaders without the member's name, rating, or timestamp
 - Minimum 3-response threshold before leaders see covenant alignment results
 - Encrypted cross-browser covenant synchronization using NIP-78
-- Opt-in anonymous weekly battery sharing
+- One-time member privacy choice for automatic anonymous weekly battery sharing
+- Automatic weekly contribution refresh after opted-in battery check-ins
 - Leadership weekly restfulness metric after 3 anonymous contributors
+- Restivism battery glyphs for the organization average and 1–5 distribution
 - Simple coverage request with **Waiting / Covered / Paused**
 - Explicit acceptance before coverage counts
 - Pause-work path when nobody has capacity
@@ -166,7 +168,14 @@ alignment uses NIP-78 kind `78`; weekly battery summaries use addressable kind
 `30078`. Full schema details and security limitations are documented in
 `NIP.md`.
 
-The weekly leadership metric is intentionally aggregate-only. Each participant may
-explicitly share their current week's personal battery average. Each participant
+The weekly leadership metric is intentionally aggregate-only. When joining an
+organization, members make a one-time privacy choice: automatically contribute their
+weekly battery average anonymously, or keep battery data private. Members can change
+that choice later. If automatic sharing is enabled, new battery check-ins refresh the
+member's single weekly contribution without another share action. Each participant
 counts once, regardless of how often they checked in, and the organization result
 does not appear until at least three anonymous contributors exist.
+
+The leadership view uses the same Restivism battery glyphs for the weekly
+organization average and for the 1–5 distribution. It never displays member aliases
+or individual battery histories.
