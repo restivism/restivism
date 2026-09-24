@@ -75,7 +75,9 @@ device, but this branch does **not yet synchronize organization data between
 devices**. Covenants, anonymous alignment responses, coverage, and reflections are
 currently local-first browser data, not server-enforced authorization. The
 leader/member permissions and anonymous aggregate are therefore the intended UX and
-data model, not yet a complete cross-device authorization system.
+data model, not yet a complete cross-device authorization system. Free-text feedback
+can still reveal identity through writing style or self-disclosed details, so the UI
+warns members not to include identifying information.
 
 That distinction is intentional for this iteration: the organization UX and data
 isolation model can be tested without publishing sensitive operational information
@@ -100,6 +102,7 @@ to Nostr or inventing a weak shared-key sync scheme.
 - Multiple organizations on one device with explicit organization switching
 - Leader-owned three-promise rest covenant
 - Anonymous-to-the-UI member alignment slider with emoji feedback
+- Optional anonymous free-text covenant feedback, shown to leaders without the member's name, rating, or timestamp
 - Minimum 3-response threshold before leaders see covenant alignment results
 - Simple coverage request with **Waiting / Covered / Paused**
 - Explicit acceptance before coverage counts
