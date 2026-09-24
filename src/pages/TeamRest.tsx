@@ -183,8 +183,12 @@ function OrganizationGate({
         joinedAt: Date.now(),
         inviteCode: result.inviteCode,
       });
-    } catch {
-      setMessage('Could not create the organization on this device.');
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : 'Could not create the organization on this device.',
+      );
     } finally {
       setBusy(false);
     }
