@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { ProgressRing } from '@/components/rest/ProgressRing';
+import { RechargeCheckin } from '@/components/rest/RechargeCheckin';
 import { RewardSummary } from '@/components/rest/RewardSummary';
 import { ShareToCircle } from '@/components/rest/ShareToCircle';
 import { Button } from '@/components/ui/button';
@@ -130,6 +131,7 @@ function SessionFlow({ practice }: { practice: Practice }) {
                 You rested for {result.session.minutes} minute{result.session.minutes === 1 ? '' : 's'}. That was an act of resistance.
               </p>
             </div>
+            <RechargeCheckin session={result.session} />
             <RewardSummary result={result} />
             <ShareToCircle practice={practice} minutes={result.session.minutes} />
             <div className="grid grid-cols-2 gap-3">

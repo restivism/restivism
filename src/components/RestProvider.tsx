@@ -1,6 +1,6 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { RestContext, type RestContextType, type SessionResult } from '@/contexts/RestContext';
+import { type CheckinResult, RestContext, type RestContextType, type SessionResult } from '@/contexts/RestContext';
 import { toast } from '@/hooks/useToast';
 import {
   awardBadges,
@@ -9,6 +9,7 @@ import {
   dayKey,
   DEFAULT_REST_STATE,
   levelFor,
+  rechargeBonus,
   type RestState,
   totalEmbers,
 } from '@/lib/rest';
@@ -71,7 +72,7 @@ export function RestProvider({ children }: { children: ReactNode }) {
   const completeSession = useCallback<RestContextType['completeSession']>(({ practice, minutes, logged }) => {
     const prev = stateRef.current;
     const now = Date.now();
-    const { total, lines, lowEnergy } = calculateEmbers(prev, { minutes, logged, now });
+    const { total, lines, lowEnergy, energyBefore } = calculateEmbers(prev, { minutes, logged, now });
     const session = {
       id: crypto.randomUUID(),
       practice,
@@ -80,6 +81,7 @@ export function RestProvider({ children }: { children: ReactNode }) {
       embers: total,
       logged,
       lowEnergy,
+      energyBefore,
     };
     const withSession = { ...prev, sessions: [...prev.sessions, session] };
     const { state: next, earned } = awardBadges(withSession, now);
@@ -92,10 +94,31 @@ export function RestProvider({ children }: { children: ReactNode }) {
     return result;
   }, [commit]);
 
-  const checkIn = useCallback((level: number) => {
+  const checkIn = useCallback<RestContextType['checkIn']>((level, sessionId) => {
     const prev = stateRef.current;
-    const checkins = [...prev.checkins, { at: Date.now(), level }].slice(-200);
-    commit({ ...prev, checkins });
+    const at = Date.now();
+    const result: CheckinResult = {};
+
+    let sessions = prev.sessions;
+    if (sessionId) {
+      sessions = sessions.map((s) => {
+        if (s.id !== sessionId) return s;
+        const bonus = rechargeBonus(s.energyBefore, level);
+        result.embers = bonus;
+        if (s.energyBefore) result.gained = level - s.energyBefore;
+        return { ...s, energyAfter: level, rechargeEmbers: bonus };
+      });
+    }
+
+    // Changing your mind about a post-rest reading replaces it rather than adding another.
+    const last = prev.checkins[prev.checkins.length - 1];
+    const base = sessionId && last?.sessionId === sessionId ? prev.checkins.slice(0, -1) : prev.checkins;
+    const checkins = [...base, { at, level, sessionId }].slice(-500);
+
+    const { state: next, earned } = awardBadges({ ...prev, sessions, checkins }, at);
+    commit(next);
+    announceBadges(earned);
+    return result;
   }, [commit]);
 
   const toggleQuest = useCallback((id: string) => {
@@ -157,8 +180,8 @@ function useRestReminders(state: RestState) {
       if (now - Math.max(lastSession, lastReminded.current) < interval * 60_000) return;
       lastReminded.current = now;
 
-      const title = 'Time to rest';
-      const body = 'You have been going for a while. Take five minutes. The work will wait.';
+      const title = 'How is your battery?';
+      const body = 'You have been going for a while. Check in, and take the break it asks for.';
 
       if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
         try {

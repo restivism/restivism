@@ -1,5 +1,9 @@
 import {
   Armchair,
+  BatteryCharging,
+  BatteryMedium,
+  Eye,
+  Zap,
   BedDouble,
   Cloud,
   Flame,
@@ -187,12 +191,20 @@ export interface RestSession {
   logged?: boolean;
   /** Rested while the latest energy check-in was low. */
   lowEnergy?: boolean;
+  /** Battery level going into the rest, from a recent check-in. */
+  energyBefore?: number;
+  /** Battery level reported right after the rest. */
+  energyAfter?: number;
+  /** Embers awarded for checking back in after the rest. */
+  rechargeEmbers?: number;
 }
 
 export interface EnergyCheckin {
   at: number;
   /** 1 (empty) to 5 (full). */
   level: number;
+  /** Set when this is the check-in right after a rest. */
+  sessionId?: string;
 }
 
 export interface RestSettings {
@@ -313,6 +325,22 @@ export const ENERGY_LEVELS = [
   { level: 5, label: 'Fully charged', short: 'Full' },
 ] as const;
 
+export const LEVEL_COLOR: Record<number, string> = {
+  1: 'bg-rose-500',
+  2: 'bg-orange-500',
+  3: 'bg-amber-400',
+  4: 'bg-lime-500',
+  5: 'bg-emerald-500',
+};
+
+export const LEVEL_TEXT: Record<number, string> = {
+  1: 'text-rose-600 dark:text-rose-400',
+  2: 'text-orange-600 dark:text-orange-400',
+  3: 'text-amber-600 dark:text-amber-300',
+  4: 'text-lime-700 dark:text-lime-400',
+  5: 'text-emerald-700 dark:text-emerald-400',
+};
+
 /** The latest check-in, if it happened within the last `hours`. */
 export function recentCheckin(checkins: EnergyCheckin[], now = Date.now(), hours = 8): EnergyCheckin | undefined {
   const latest = checkins[checkins.length - 1];
@@ -334,7 +362,7 @@ export interface EmberLine {
 export function calculateEmbers(
   state: RestState,
   opts: { minutes: number; logged?: boolean; now?: number },
-): { total: number; lines: EmberLine[]; lowEnergy: boolean } {
+): { total: number; lines: EmberLine[]; lowEnergy: boolean; energyBefore?: number } {
   const now = opts.now ?? Date.now();
   const lines: EmberLine[] = [];
 
@@ -363,11 +391,17 @@ export function calculateEmbers(
     lines.push({ label: 'Daily goal reached', amount: 15 });
   }
 
-  return { total: lines.reduce((s, l) => s + l.amount, 0), lines, lowEnergy };
+  return { total: lines.reduce((s, l) => s + l.amount, 0), lines, lowEnergy, energyBefore: checkin?.level };
+}
+
+/** Embers for checking your battery again after a rest: 5, plus 3 per bar gained. */
+export function rechargeBonus(before: number | undefined, after: number): number {
+  const gained = before ? Math.max(0, after - before) : 0;
+  return 5 + gained * 3;
 }
 
 export function totalEmbers(state: RestState): number {
-  const fromSessions = state.sessions.reduce((s, x) => s + x.embers, 0);
+  const fromSessions = state.sessions.reduce((s, x) => s + x.embers + (x.rechargeEmbers ?? 0), 0);
   const fromQuests = Object.values(state.quests).reduce((s, q) => s + q.length * QUEST_EMBERS, 0);
   return fromSessions + fromQuests;
 }
@@ -481,6 +515,17 @@ export interface RestStats {
   questSweepDays: number;
   longestUnplug: number;
   shares: number;
+  /** Total battery bars gained across rests with before and after check-ins. */
+  barsRecharged: number;
+  /** Most bars gained from a single rest. */
+  bestRecharge: number;
+  /** Distinct days with at least one battery check-in. */
+  checkinDays: number;
+}
+
+export function barsGained(session: RestSession): number {
+  if (!session.energyBefore || !session.energyAfter) return 0;
+  return Math.max(0, session.energyAfter - session.energyBefore);
 }
 
 export function computeStats(state: RestState, now = Date.now()): RestStats {
@@ -503,6 +548,9 @@ export function computeStats(state: RestState, now = Date.now()): RestStats {
     questSweepDays: Object.values(state.quests).filter((q) => q.length >= 3).length,
     longestUnplug,
     shares: state.shares,
+    barsRecharged: state.sessions.reduce((sum, x) => sum + barsGained(x), 0),
+    bestRecharge: Math.max(0, ...state.sessions.map(barsGained)),
+    checkinDays: new Set(state.checkins.map((c) => dayKey(c.at))).size,
   };
 }
 
@@ -516,6 +564,13 @@ export interface Badge {
 
 export const BADGES: Badge[] = [
   {
+    id: 'first-reading',
+    name: 'First Reading',
+    description: 'Check your battery for the first time.',
+    icon: BatteryMedium,
+    check: (s) => s.checkinDays >= 1,
+  },
+  {
     id: 'first-pause',
     name: 'First Pause',
     description: 'Complete your first rest.',
@@ -528,6 +583,13 @@ export const BADGES: Badge[] = [
     description: 'Rest when your battery is low.',
     icon: Heart,
     check: (s) => s.lowEnergyRests >= 1,
+  },
+  {
+    id: 'recharged',
+    name: 'Recharged',
+    description: 'Gain two bars of battery from a single rest.',
+    icon: BatteryCharging,
+    check: (s) => s.bestRecharge >= 2,
   },
   {
     id: 'kindling',
@@ -593,6 +655,20 @@ export const BADGES: Badge[] = [
     check: (s) => s.shares >= 1,
   },
   {
+    id: 'know-thyself',
+    name: 'Know Thyself',
+    description: 'Check your battery on seven different days.',
+    icon: Eye,
+    check: (s) => s.checkinDays >= 7,
+  },
+  {
+    id: 'power-station',
+    name: 'Power Station',
+    description: 'Recharge twenty bars in total.',
+    icon: Zap,
+    check: (s) => s.barsRecharged >= 20,
+  },
+  {
     id: 'deep-well',
     name: 'Deep Well',
     description: 'Rest for ten hours in total.',
@@ -632,20 +708,9 @@ export interface Nudge {
 
 export function getNudge(state: RestState, now = Date.now()): Nudge | undefined {
   const hour = new Date(now).getHours();
-  const checkin = recentCheckin(state.checkins, now);
   const last = state.sessions[state.sessions.length - 1];
   const sinceLast = last ? (now - last.endedAt) / 60_000 : Infinity;
   const restedRecently = sinceLast < 90;
-
-  if (checkin && checkin.level <= 2 && !(last && last.endedAt > checkin.at)) {
-    return {
-      tone: 'urgent',
-      title: checkin.level === 1 ? 'You are running on fumes.' : 'Your battery is low.',
-      body: 'This is the signal, not a weakness. Stop what you are doing and lie down. The work will still be there in twenty minutes, and you will be better at it.',
-      practice: 'nap',
-      minutes: 20,
-    };
-  }
 
   if (hour >= 23 || hour < 4) {
     return {
@@ -682,6 +747,76 @@ export function getNudge(state: RestState, now = Date.now()): Nudge | undefined 
 
   return undefined;
 }
+
+// ---------------------------------------------------------------------------
+// Recharge plans: what to do, given your battery
+// ---------------------------------------------------------------------------
+
+export interface RechargePick {
+  practice: PracticeId;
+  minutes: number;
+  why: string;
+}
+
+export interface RechargePlan {
+  level: number;
+  headline: string;
+  body: string;
+  picks: RechargePick[];
+}
+
+export const RECHARGE_PLANS: Record<number, RechargePlan> = {
+  1: {
+    level: 1,
+    headline: 'Stop. You are running on fumes.',
+    body: 'Nothing you do on an empty battery is your best work. Cancel or postpone one thing, then lie down. This is not optional.',
+    picks: [
+      { practice: 'nap', minutes: 20, why: 'Sleep is the fastest recharge there is.' },
+      { practice: 'nothing', minutes: 10, why: 'If you cannot sleep, just stop.' },
+      { practice: 'unplug', minutes: 60, why: 'Step away from every feed for an hour.' },
+    ],
+  },
+  2: {
+    level: 2,
+    headline: 'You are depleted. Recharge before it gets worse.',
+    body: 'Low battery is a signal, not a weakness. The work will still be there in twenty minutes, and you will be better at it.',
+    picks: [
+      { practice: 'nap', minutes: 20, why: 'A short nap restores more than coffee.' },
+      { practice: 'bodyscan', minutes: 10, why: 'Release the tension you are carrying.' },
+      { practice: 'unplug', minutes: 30, why: 'Give your nervous system a break from alerts.' },
+    ],
+  },
+  3: {
+    level: 3,
+    headline: 'Getting by is not the same as okay.',
+    body: 'This is the moment most people push through. Top up now and you will not end up empty tonight.',
+    picks: [
+      { practice: 'wander', minutes: 20, why: 'Movement and daylight lift a flat battery.' },
+      { practice: 'nothing', minutes: 5, why: 'Five minutes of stillness resets more than you think.' },
+      { practice: 'breathe', minutes: 5, why: 'Slow breathing calms a buzzing mind.' },
+    ],
+  },
+  4: {
+    level: 4,
+    headline: 'Steady. Rest now so you stay here.',
+    body: 'Rest is not only for recovery. Small breaks while you are doing well keep you from crashing later.',
+    picks: [
+      { practice: 'breathe', minutes: 5, why: 'A quick reset between tasks.' },
+      { practice: 'wander', minutes: 10, why: 'A short walk to keep the charge.' },
+      { practice: 'bodyscan', minutes: 5, why: 'Catch tension before it builds.' },
+    ],
+  },
+  5: {
+    level: 5,
+    headline: 'Fully charged. Protect it.',
+    body: 'Notice what got you here and do more of it. Resting while full is how you stay full.',
+    picks: [
+      { practice: 'breathe', minutes: 3, why: 'Savor it. Three slow minutes.' },
+      { practice: 'wander', minutes: 20, why: 'Enjoy the energy without spending it on work.' },
+      { practice: 'nothing', minutes: 5, why: 'Practice stopping while it is easy.' },
+    ],
+  },
+};
 
 // ---------------------------------------------------------------------------
 // Permission slips

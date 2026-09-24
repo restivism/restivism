@@ -10,10 +10,21 @@ export interface SessionResult {
   levelUp?: Level;
 }
 
+export interface CheckinResult {
+  /** Bars gained since the pre-rest reading, when there was one. */
+  gained?: number;
+  /** Recharge embers awarded for a post-rest check-in. */
+  embers?: number;
+}
+
 export interface RestContextType {
   state: RestState;
   completeSession: (input: { practice: PracticeId; minutes: number; logged?: boolean }) => SessionResult;
-  checkIn: (level: number) => void;
+  /**
+   * Record a battery reading. Pass `sessionId` for the check-in right after a
+   * rest; that awards recharge embers and returns how many bars were gained.
+   */
+  checkIn: (level: number, sessionId?: string) => CheckinResult;
   toggleQuest: (id: string) => void;
   recordShare: () => void;
   updateSettings: (patch: Partial<RestSettings>) => void;

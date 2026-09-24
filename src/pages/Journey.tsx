@@ -2,6 +2,7 @@ import { useSeoMeta } from '@unhead/react';
 import { Flame, Lock, PencilLine } from 'lucide-react';
 
 import { AppShell } from '@/components/rest/AppShell';
+import { BatteryGlyph } from '@/components/rest/BatteryControl';
 import { LogRestDialog } from '@/components/rest/LogRestDialog';
 import { MoonPhase } from '@/components/rest/MoonPhase';
 import { RestSettingsCard } from '@/components/rest/RestSettingsCard';
@@ -15,8 +16,10 @@ import {
   BADGES,
   computeStats,
   dayKey,
+  ENERGY_LEVELS,
   formatMinutes,
   getPractice,
+  LEVEL_COLOR,
   LEVELS,
   levelFor,
   minutesByDay,
@@ -39,7 +42,7 @@ export default function Journey() {
         <header className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="text-5xl font-semibold tracking-tight">Your journey</h1>
-            <p className="mt-2 text-lg text-muted-foreground">Every rest adds light to your moon.</p>
+            <p className="mt-2 text-lg text-muted-foreground">Every rest adds light to your moon. Every reading teaches you your rhythm.</p>
           </div>
           <LogRestDialog>
             <Button variant="outline" className="h-11 rounded-full px-5 text-base">
@@ -87,7 +90,7 @@ export default function Journey() {
             { label: 'Current streak', value: `${stats.streak.current} day${stats.streak.current === 1 ? '' : 's'}` },
             { label: 'Best streak', value: `${stats.streak.best} day${stats.streak.best === 1 ? '' : 's'}` },
             { label: 'Total rest', value: formatMinutes(stats.totalMinutes) },
-            { label: 'Rests taken', value: String(stats.sessionCount) },
+            { label: 'Bars recharged', value: String(stats.barsRecharged) },
           ].map((s) => (
             <div key={s.label} className="rounded-2xl border bg-card p-5 shadow-sm">
               <dt className="text-sm font-semibold text-muted-foreground">{s.label}</dt>
@@ -95,6 +98,8 @@ export default function Journey() {
             </div>
           ))}
         </dl>
+
+        <BatteryHistory now={now} />
 
         <RestChart now={now} />
 
@@ -167,6 +172,70 @@ export default function Journey() {
         </section>
       </div>
     </AppShell>
+  );
+}
+
+function BatteryHistory({ now }: { now: number }) {
+  const { state } = useRest();
+  const byDay = new Map<string, number[]>();
+  for (const c of state.checkins) {
+    const k = dayKey(c.at);
+    byDay.set(k, [...(byDay.get(k) ?? []), c.level]);
+  }
+  const days = Array.from({ length: 14 }, (_, i) => {
+    const ts = addDays(now, i - 13);
+    const readings = byDay.get(dayKey(ts)) ?? [];
+    const avg = readings.length ? Math.round(readings.reduce((a, b) => a + b, 0) / readings.length) : undefined;
+    return { ts, key: dayKey(ts), avg, count: readings.length };
+  });
+  const lowDays = days.filter((d) => d.avg && d.avg <= 2).length;
+  const readDays = days.filter((d) => d.avg).length;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="font-display text-2xl">Your battery, day by day</CardTitle>
+        <CardDescription className="text-base">
+          {readDays === 0
+            ? 'Check your battery each day and your rhythm will appear here.'
+            : lowDays > 0
+              ? `${lowDays} low day${lowDays === 1 ? '' : 's'} in the last two weeks. Notice what came before them.`
+              : 'No low days in the last two weeks. Whatever you are doing, keep doing it.'}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <ul className="flex items-end gap-1.5 sm:gap-2">
+          {days.map((d) => {
+            const date = new Date(d.ts);
+            const label = date.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+            return (
+              <li
+                key={d.key}
+                className="flex flex-1 flex-col items-center gap-2"
+                aria-label={d.avg ? `${label}: ${ENERGY_LEVELS[d.avg - 1].label}` : `${label}: no reading`}
+              >
+                <span className="h-1 w-1/3 rounded-t-sm bg-foreground/30" aria-hidden />
+                <span
+                  className={cn(
+                    'flex h-24 w-full max-w-10 flex-col-reverse gap-0.5 rounded-md border-2 p-0.5 -mt-2',
+                    d.avg ? 'border-foreground/40' : 'border-dashed border-foreground/20',
+                  )}
+                  aria-hidden
+                  title={d.avg ? `${label}: ${ENERGY_LEVELS[d.avg - 1].short}` : `${label}: no reading`}
+                >
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <span key={i} className={cn('flex-1 rounded-[2px]', d.avg && i <= d.avg ? LEVEL_COLOR[d.avg] : 'bg-transparent')} />
+                  ))}
+                </span>
+                <span className="text-xs text-muted-foreground" aria-hidden>
+                  {date.toLocaleDateString(undefined, { weekday: 'narrow' })}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -259,9 +328,19 @@ function RecentRests() {
                       {new Date(s.endedAt).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })}
                       {s.logged && ' · logged'}
                     </p>
+                    {s.energyBefore && s.energyAfter && (
+                      <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                        <BatteryGlyph level={s.energyBefore} />
+                        <span aria-hidden>&rarr;</span>
+                        <BatteryGlyph level={s.energyAfter} />
+                        <span className="sr-only">
+                          Battery went from {s.energyBefore} to {s.energyAfter} of 5
+                        </span>
+                      </p>
+                    )}
                   </div>
                   <span className="flex items-center gap-1 text-sm font-semibold text-ember-foreground">
-                    <Flame className="size-4" aria-hidden />+{s.embers}
+                    <Flame className="size-4" aria-hidden />+{s.embers + (s.rechargeEmbers ?? 0)}
                   </span>
                 </li>
               );

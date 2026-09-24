@@ -3,8 +3,12 @@ import type { ReactNode } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 
 import { LoginArea } from '@/components/auth/LoginArea';
+import { useNow } from '@/hooks/useNow';
+import { useRest } from '@/hooks/useRest';
+import { ENERGY_LEVELS, recentCheckin } from '@/lib/rest';
 import { cn } from '@/lib/utils';
 
+import { BatteryGlyph } from './BatteryControl';
 import { ThemeToggle } from './ThemeToggle';
 
 const NAV = [
@@ -54,6 +58,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </nav>
 
           <div className="ml-auto flex items-center gap-2">
+            <BatteryIndicator />
             <ThemeToggle />
             <LoginArea className="max-w-48" />
           </div>
@@ -89,5 +94,28 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </nav>
     </div>
+  );
+}
+
+/** Your latest battery reading, always one tap from checking in again. */
+function BatteryIndicator() {
+  const now = useNow();
+  const { state } = useRest();
+  const current = recentCheckin(state.checkins, now);
+  const label = current ? ENERGY_LEVELS[current.level - 1].short : 'Check in';
+
+  return (
+    <Link
+      to="/"
+      aria-label={current ? `Battery: ${ENERGY_LEVELS[current.level - 1].label}. Check in again` : 'Check your battery'}
+      className={cn(
+        'flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold transition-colors hover:bg-secondary',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        current ? 'text-foreground' : 'text-muted-foreground',
+      )}
+    >
+      <BatteryGlyph level={current?.level} />
+      <span className="hidden sm:inline">{label}</span>
+    </Link>
   );
 }
