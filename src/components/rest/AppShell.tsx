@@ -45,7 +45,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 isActive ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
               )}
             >
-              Team
+              Organization
             </NavLink>
           </nav>
         </div>
