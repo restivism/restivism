@@ -26,11 +26,13 @@ interface ChargingBatteryProps {
   /** 0 to 1 */
   value: number;
   paused?: boolean;
+  /** Draw the shell dark, for light backgrounds. */
+  onLight?: boolean;
   className?: string;
 }
 
 /** A tall battery that fills with rippling liquid as a rest session runs. */
-export function ChargingBattery({ recharge, value, paused = false, className }: ChargingBatteryProps) {
+export function ChargingBattery({ recharge, value, paused = false, onLight = false, className }: ChargingBatteryProps) {
   const id = useId();
   const v = Math.max(0, Math.min(1, value));
   const top = INNER.y + INNER.h * (1 - v);
@@ -77,8 +79,8 @@ export function ChargingBattery({ recharge, value, paused = false, className }: 
         </defs>
 
         {/* Terminal and shell */}
-        <rect x="56" y="6" width="48" height="18" rx="6" className="fill-white/70" />
-        <rect x="8" y="24" width="144" height="250" rx="30" fill={`url(#${id}-glass)`} className="stroke-white/80" strokeWidth="5" />
+        <rect x="56" y="6" width="48" height="18" rx="6" className={onLight ? 'fill-foreground/60' : 'fill-white/70'} />
+        <rect x="8" y="24" width="144" height="250" rx="30" fill={`url(#${id}-glass)`} className={onLight ? 'stroke-foreground/60' : 'stroke-white/80'} strokeWidth="5" />
 
         <g clipPath={`url(#${id}-clip)`}>
           <g style={{ transform: `translateY(${top}px)` }} className="motion-safe:transition-transform motion-safe:duration-1000 motion-safe:ease-out">

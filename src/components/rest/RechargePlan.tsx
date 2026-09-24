@@ -1,4 +1,4 @@
-import { ArrowRight, ArrowUp, Check, Timer } from 'lucide-react';
+import { ArrowRight, Check, Timer } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import { useRest } from '@/hooks/useRest';
@@ -6,22 +6,13 @@ import { dayKey, ENERGY_LEVELS, type EnergyCheckin, getRecharge, LEVEL_TEXT, REC
 import { cn } from '@/lib/utils';
 
 import { BatteryGlyph } from './BatteryControl';
+import { RestLoop } from './RestLoop';
 
 /** What your battery reading means you should do next: one recharge, then small acts of care. */
 export function RechargePlan({ checkin }: { checkin?: EnergyCheckin }) {
   const { state, toggleQuest, completeSession } = useRest();
 
-  if (!checkin) {
-    return (
-      <section className="flex flex-col items-center gap-3 rounded-2xl border border-dashed bg-card/60 px-6 py-10 text-center backdrop-blur">
-        <ArrowUp className="size-6 text-muted-foreground motion-safe:animate-float" aria-hidden />
-        <h2 className="text-2xl font-semibold">Your plan starts with your battery.</h2>
-        <p className="max-w-md text-base text-muted-foreground">
-          Tap the battery that matches how you feel right now. We will tell you how to recharge: play time, sleep time, or social time.
-        </p>
-      </section>
-    );
-  }
+  if (!checkin) return <RestLoop />;
 
   const { level } = checkin;
   const plan = RECHARGE_PLANS[level];
