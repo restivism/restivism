@@ -1,6 +1,30 @@
+import { generateSecretKey, getPublicKey } from 'nostr-tools/pure';
+
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const PBKDF2_ITERATIONS = 150_000;
+
+function getWebCrypto(): Crypto {
+  const webCrypto = globalThis.crypto;
+  if (!webCrypto?.getRandomValues || !webCrypto.subtle) {
+    const insecureHint = globalThis.isSecureContext === false
+      ? ' Open Restivism over HTTPS or use http://localhost when developing.'
+      : '';
+    throw new Error(`Secure browser cryptography is unavailable.${insecureHint}`);
+  }
+  return webCrypto;
+}
+
+function createId(): string {
+  const webCrypto = getWebCrypto();
+  if (typeof webCrypto.randomUUID === 'function') return webCrypto.randomUUID();
+
+  const bytes = webCrypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
 
 export type OrganizationRole = 'leader' | 'member';
 
@@ -10,6 +34,16 @@ export interface OrganizationMembership {
   alias: string;
   role: OrganizationRole;
   joinedAt: number;
+  /** Shared organization encryption key, delivered inside the passcode-protected invite. */
+  syncKey?: string;
+  /** Public key that is allowed to publish leader-owned organization state. */
+  leaderPubkey?: string;
+  /** Only present for leaders; never included in member invites. */
+  leaderSecretKey?: string;
+  /** Anonymous per-membership signing key for alignment and restfulness submissions. */
+  memberSecretKey?: string;
+  /** Member-controlled preference for automatic anonymous weekly battery sharing. */
+  autoShareWeeklyBattery?: boolean;
   /** Leaders keep the encrypted invite so they can share it again. */
   inviteCode?: string;
 }
@@ -36,6 +70,12 @@ interface InviteEnvelope {
 interface InvitePayload {
   name: string;
   createdAt: number;
+  syncKey: string;
+  leaderPubkey: string;
+}
+
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 function bytesToBase64Url(bytes: Uint8Array): string {
@@ -78,7 +118,8 @@ function decodeEnvelope(inviteCode: string): InviteEnvelope {
 }
 
 async function deriveInviteKey(passcode: string, salt: Uint8Array<ArrayBuffer>): Promise<CryptoKey> {
-  const material = await crypto.subtle.importKey(
+  const webCrypto = getWebCrypto();
+  const material = await webCrypto.subtle.importKey(
     'raw',
     encoder.encode(passcode),
     'PBKDF2',
@@ -86,7 +127,7 @@ async function deriveInviteKey(passcode: string, salt: Uint8Array<ArrayBuffer>):
     ['deriveKey'],
   );
 
-  return crypto.subtle.deriveKey(
+  return webCrypto.subtle.deriveKey(
     {
       name: 'PBKDF2',
       salt,
@@ -105,17 +146,23 @@ async function deriveInviteKey(passcode: string, salt: Uint8Array<ArrayBuffer>):
  * The passcode is not embedded in the invite; it is required to decrypt the org metadata.
  */
 export async function createOrganizationInvite(name: string, passcode: string) {
-  const id = crypto.randomUUID();
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const webCrypto = getWebCrypto();
+  const id = createId();
+  const leaderSecret = generateSecretKey();
+  const memberSecret = generateSecretKey();
+  const syncKey = webCrypto.getRandomValues(new Uint8Array(32));
+  const salt = webCrypto.getRandomValues(new Uint8Array(16));
+  const iv = webCrypto.getRandomValues(new Uint8Array(12));
   const key = await deriveInviteKey(passcode, salt);
 
   const payload: InvitePayload = {
     name: name.trim(),
     createdAt: Date.now(),
+    syncKey: bytesToBase64Url(syncKey),
+    leaderPubkey: getPublicKey(leaderSecret),
   };
 
-  const encrypted = await crypto.subtle.encrypt(
+  const encrypted = await webCrypto.subtle.encrypt(
     { name: 'AES-GCM', iv },
     key,
     encoder.encode(JSON.stringify(payload)),
@@ -134,6 +181,10 @@ export async function createOrganizationInvite(name: string, passcode: string) {
       id,
       name: payload.name,
       createdAt: payload.createdAt,
+      syncKey: payload.syncKey,
+      leaderPubkey: payload.leaderPubkey,
+      leaderSecretKey: bytesToHex(leaderSecret),
+      memberSecretKey: bytesToHex(memberSecret),
     },
     inviteCode,
   };
@@ -147,7 +198,8 @@ export async function openOrganizationInvite(inviteCode: string, passcode: strin
     const ciphertext = base64UrlToBytes(envelope.ciphertext);
     const key = await deriveInviteKey(passcode, salt);
 
-    const decrypted = await crypto.subtle.decrypt(
+    const webCrypto = getWebCrypto();
+    const decrypted = await webCrypto.subtle.decrypt(
       { name: 'AES-GCM', iv },
       key,
       ciphertext,
@@ -157,7 +209,12 @@ export async function openOrganizationInvite(inviteCode: string, passcode: strin
     if (!parsed || typeof parsed !== 'object') throw new Error('Invalid organization invite.');
     const payload = parsed as Partial<InvitePayload>;
 
-    if (typeof payload.name !== 'string' || typeof payload.createdAt !== 'number') {
+    if (
+      typeof payload.name !== 'string' ||
+      typeof payload.createdAt !== 'number' ||
+      typeof payload.syncKey !== 'string' ||
+      typeof payload.leaderPubkey !== 'string'
+    ) {
       throw new Error('Invalid organization invite.');
     }
 
@@ -165,8 +222,14 @@ export async function openOrganizationInvite(inviteCode: string, passcode: strin
       id: envelope.id,
       name: payload.name,
       createdAt: payload.createdAt,
+      syncKey: payload.syncKey,
+      leaderPubkey: payload.leaderPubkey,
+      memberSecretKey: bytesToHex(generateSecretKey()),
     };
-  } catch {
-    throw new Error('That invite code and passcode do not match.');
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('Secure browser cryptography is unavailable.')) {
+      throw error;
+    }
+    throw new Error('That invite code and passcode do not match.', { cause: error });
   }
 }

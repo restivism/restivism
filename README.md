@@ -12,6 +12,14 @@ of depending on one person to push through.
 ### My rest
 
 1. **Check in.** Set your battery from 1 (running on fumes) to 5 (fully charged).
+   Or say it out loud: speak for up to 30 seconds. Once the user opts in to
+   word understanding, Restivism transcribes what they said and reads its
+   sentiment on the device, and suggests a level from that; a flat, quiet voice
+   can pull it lower, but tone never raises it. Without word understanding it
+   shows loudness, tone (pitch movement), and emphasis but does not guess a
+   level, because tone alone cannot tell tired from upset. The user always
+   confirms or taps the level that feels true. If someone mentions suicide or
+   self-harm, Restivism skips the reading and points them to a helpline instead.
 2. **Get a plan.** Restivism recommends play, sleep, or social time plus a few small
    acts of care.
 3. **Recharge.** Start a timed rest session.
@@ -67,10 +75,10 @@ AES-256-GCM.
 
 Once inside an organization, the experience is deliberately small:
 
-1. **Agree — Our rest agreement.** A simple covenant with three memorable promises:
-   rest time is protected; coverage only counts when accepted; and when nobody has
-   capacity, nonessential work can wait. Organizations may add one short sentence
-   in their own words.
+1. **Agree — Our rest covenant.** Organization leaders create and revise the
+   covenant. Members see it read-only and can submit a 1–5 emoji alignment response
+   without attaching their name or alias. Leader results stay hidden until at least
+   three responses exist for the current covenant revision.
 2. **Cover — Make room for the rest.** Record who is resting, what needs attention,
    the day, and either who can cover or that the work should pause. A coverage
    request stays **Waiting** until someone marks it accepted.
@@ -96,10 +104,17 @@ invite + passcode are required to join it again.
 
 ### Current prototype limitation
 
-The invite + passcode can be used to join the same organization identity on another
-device, but this branch does **not yet synchronize organization data between
-devices**. Agreements, coverage, and reflections are currently local-first browser
-data, not server-enforced authorization.
+New organizations now include encrypted shared-sync credentials inside the
+passcode-protected invite. The app uses NIP-78 application data on the configured
+Nostr relays to synchronize the leader-published covenant, anonymous covenant
+alignment/comments, and anonymous weekly battery summaries between browser origins
+and devices. The relay sees ciphertext and an opaque random organization identifier,
+not the plaintext organization content.
+
+Coverage/rota items and the shared reflect answer are still local-first in this
+iteration. Free-text feedback can still reveal identity through writing style or
+self-disclosed details, so the UI warns members not to include identifying
+information.
 
 That distinction is intentional for this iteration: the organization UX and data
 isolation model can be tested without publishing sensitive operational information
@@ -108,6 +123,13 @@ to Nostr or inventing a weak shared-key sync scheme.
 ## Privacy
 
 - Personal rest state stays in browser `localStorage` under `restivism:state`.
+- Voice check-ins are analysed in the browser. Audio is held in memory for the
+  check-in only, never stored or sent. Word understanding uses Whisper tiny.en
+  and a DistilBERT sentiment model via transformers.js in a Web Worker; the
+  models (about 110 MB) are downloaded from Hugging Face once, when the user
+  opts in, and cached by the browser. The ONNX runtime is served from this app,
+  not a CDN. Transcripts are shown back to the user and never saved. Only the
+  level the user confirms is saved.
 - Organization rest records are namespaced by organization ID.
 - Organization agreement, coverage, and reflection data are not published to Nostr.
 - There is no analytics, streak system, leaderboard, or individual performance
@@ -118,11 +140,21 @@ to Nostr or inventing a weak shared-key sync scheme.
 ## Features
 
 - Battery check-in with level-matched recharge plans
+- Optional voice check-in that understands what was said, on the device
+- Crisis support card when a voice check-in mentions suicide or self-harm
 - Timed play, sleep, and social rest sessions
 - Create or join an organization
 - Leader-created passcode + encrypted organization invite
 - Multiple organizations on one device with explicit organization switching
-- Simple three-promise rest agreement / covenant
+- Leader-owned three-promise rest covenant
+- Anonymous-to-the-UI member alignment slider with emoji feedback
+- Optional anonymous free-text covenant feedback, shown to leaders without the member's name, rating, or timestamp
+- Minimum 3-response threshold before leaders see covenant alignment results
+- Encrypted cross-browser covenant synchronization using NIP-78
+- One-time member privacy choice for automatic anonymous weekly battery sharing
+- Automatic weekly contribution refresh after opted-in battery check-ins
+- Leadership weekly restfulness metric after 3 anonymous contributors
+- Restivism battery glyphs for the organization average and 1–5 distribution
 - Simple coverage request with **Waiting / Covered / Paused**
 - Explicit acceptance before coverage counts
 - Pause-work path when nobody has capacity
@@ -150,8 +182,9 @@ Run `npm run test` before merging.
 ```
 src/
 ├── lib/rest.ts                  # Personal recharge plans and state
-├── lib/organization.ts          # Passcode-protected organization invites
+├── lib/organization.ts          # Passcode-protected org invites + sync credentials
 ├── lib/teamRest.ts              # Simplified org agreement, coverage, reflection
+├── hooks/useOrganizationSync.ts # Encrypted NIP-78 covenant/alignment/battery sync
 ├── components/RestProvider.tsx
 ├── components/rest/
 └── pages/
@@ -165,3 +198,27 @@ src/
 The build is a static site. Pushes to `main` deploy to GitHub Pages
 (`.github/workflows/deploy.yml`). It is also published to Nostr as the named
 nsite `restivism`.
+
+## Shared organization sync
+
+For organizations created on the shared-sync branch, the leader's passcode-encrypted
+invite contains the organization symmetric sync key and the leader public signing
+key. The leader private signing key stays only on the leader device.
+
+The leader covenant is published as encrypted NIP-78 kind `30078` app data and is
+accepted only from the trusted leader pubkey in the invite. Anonymous member
+alignment uses NIP-78 kind `78`; weekly battery summaries use addressable kind
+`30078`. Full schema details and security limitations are documented in
+`NIP.md`.
+
+The weekly leadership metric is intentionally aggregate-only. When joining an
+organization, members make a one-time privacy choice: automatically contribute their
+weekly battery average anonymously, or keep battery data private. Members can change
+that choice later. If automatic sharing is enabled, new battery check-ins refresh the
+member's single weekly contribution without another share action. Each participant
+counts once, regardless of how often they checked in, and the organization result
+does not appear until at least three anonymous contributors exist.
+
+The leadership view uses the same Restivism battery glyphs for the weekly
+organization average and for the 1–5 distribution. It never displays member aliases
+or individual battery histories.
