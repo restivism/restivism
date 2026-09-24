@@ -1,0 +1,20 @@
+{
+  "$schema": "https://nsyte.run/schemas/config.schema.json",
+  "bunkerPubkey": "0461fcbecc4c3374439932d6b8f11269ccdb7cc973ad7a50ae362db135a474dd",
+  "id": "restful",
+  "relays": [
+    "wss://relay.ditto.pub",
+    "wss://relay.dreamith.to",
+    "wss://relay.primal.net"
+  ],
+  "servers": [
+    "https://blossom.ditto.pub",
+    "https://nostr.download"
+  ],
+  "fallback": "/index.html",
+  "publishRelayList": false,
+  "publishServerList": false,
+  "publishProfile": false,
+  "title": "Restful",
+  "description": "Rest is resistance."
+}
