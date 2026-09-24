@@ -542,6 +542,7 @@ function OrganizationWorkspace({
   const organizationWeek = orgSync.weeklyBattery.filter((item) => item.weekKey === currentWeekKey);
 
   const coverageRef = useRef<HTMLElement>(null);
+  const lastAutoShareRef = useRef('');
   const [editingAgreement, setEditingAgreement] = useState(
     membership.role === 'leader' && state.agreement.revision === 0,
   );
@@ -563,6 +564,38 @@ function OrganizationWorkspace({
     }, 100);
     return () => window.clearTimeout(id);
   }, [requestedFocus]);
+
+  useEffect(() => {
+    if (
+      membership.role !== 'member' ||
+      !membership.autoShareWeeklyBattery ||
+      !orgSync.canSync ||
+      personalWeekAverage === undefined ||
+      personalWeekCheckins.length === 0
+    ) {
+      return;
+    }
+
+    const signature = `${currentWeekKey}:${personalWeekAverage.toFixed(4)}:${personalWeekCheckins.length}`;
+    if (lastAutoShareRef.current === signature) return;
+    lastAutoShareRef.current = signature;
+
+    void orgSync.publishWeeklyBattery(
+      currentWeekKey,
+      personalWeekAverage,
+      personalWeekCheckins.length,
+    ).catch((error: unknown) => {
+      console.error('Failed to auto-share anonymous weekly restfulness', error);
+      lastAutoShareRef.current = '';
+    });
+  }, [
+    currentWeekKey,
+    membership.autoShareWeeklyBattery,
+    membership.role,
+    orgSync,
+    personalWeekAverage,
+    personalWeekCheckins.length,
+  ]);
 
   const saveAgreement = async () => {
     if (membership.role !== 'leader') {
@@ -676,24 +709,6 @@ function OrganizationWorkspace({
       setMessage('Your covenant alignment was shared anonymously with the organization.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not share covenant alignment.');
-    }
-  };
-
-  const shareWeeklyRestfulness = async () => {
-    if (personalWeekAverage === undefined || personalWeekCheckins.length === 0) {
-      setMessage('Check your battery at least once this week before sharing a weekly restfulness summary.');
-      return;
-    }
-
-    try {
-      await orgSync.publishWeeklyBattery(
-        currentWeekKey,
-        personalWeekAverage,
-        personalWeekCheckins.length,
-      );
-      setMessage('Your weekly battery average was shared anonymously with the organization.');
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Could not share weekly restfulness.');
     }
   };
 
@@ -950,10 +965,11 @@ function OrganizationWorkspace({
       <WeeklyRestfulnessCard
         role={membership.role}
         canSync={orgSync.canSync}
+        autoShare={membership.autoShareWeeklyBattery ?? false}
         personalAverage={personalWeekAverage}
         personalSamples={personalWeekCheckins.length}
         submissions={organizationWeek}
-        onShare={shareWeeklyRestfulness}
+        onAutoShareChange={(enabled) => onUpdateMembership({ autoShareWeeklyBattery: enabled })}
       />
 
       <section ref={coverageRef} className="scroll-mt-24 rounded-2xl border bg-card p-5 shadow-sm sm:p-7">
@@ -1187,22 +1203,27 @@ function OrganizationWorkspace({
 function WeeklyRestfulnessCard({
   role,
   canSync,
+  autoShare,
   personalAverage,
   personalSamples,
   submissions,
-  onShare,
+  onAutoShareChange,
 }: {
   role: 'leader' | 'member';
   canSync: boolean;
+  autoShare: boolean;
   personalAverage?: number;
   personalSamples: number;
   submissions: Array<{ average: number; samples: number }>;
-  onShare: () => void;
+  onAutoShareChange: (enabled: boolean) => void;
 }) {
   const privacyThreshold = 3;
   const organizationAverage = submissions.length > 0
     ? submissions.reduce((sum, item) => sum + item.average, 0) / submissions.length
     : undefined;
+  const averageLevel = organizationAverage === undefined
+    ? undefined
+    : Math.max(1, Math.min(5, Math.round(organizationAverage)));
 
   return (
     <section className="rounded-2xl border bg-card p-5 shadow-sm sm:p-7">
@@ -1219,64 +1240,89 @@ function WeeklyRestfulnessCard({
         </div>
       </div>
 
-      <div className="mt-5 rounded-xl bg-secondary/50 p-4">
-        <p className="font-semibold">Your week</p>
-        {personalAverage === undefined ? (
-          <p className="mt-1 text-sm text-muted-foreground">
-            No battery check-ins yet this week.
-          </p>
-        ) : (
-          <p className="mt-1 text-sm text-muted-foreground">
-            Your private average is <strong className="text-foreground">{personalAverage.toFixed(1)} / 5</strong>
-            {' '}from {personalSamples} check-in{personalSamples === 1 ? '' : 's'}.
-          </p>
-        )}
-        <button
-          type="button"
-          disabled={!canSync || personalAverage === undefined}
-          onClick={onShare}
-          className="mt-3 rounded-full border px-4 py-2 text-sm font-bold transition-colors hover:bg-background disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          Share/update anonymously
-        </button>
-      </div>
+      {role === 'member' && (
+        <div className="mt-5 rounded-xl bg-secondary/50 p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="font-semibold">Your week</p>
+              {personalAverage === undefined ? (
+                <p className="mt-1 text-sm text-muted-foreground">
+                  No battery check-ins yet this week.
+                </p>
+              ) : (
+                <div className="mt-2 flex items-center gap-3">
+                  <BatteryGlyph level={Math.round(personalAverage)} size="md" />
+                  <p className="text-sm text-muted-foreground">
+                    Private average: <strong className="text-foreground">{personalAverage.toFixed(1)} / 5</strong>
+                    {' '}from {personalSamples} check-in{personalSamples === 1 ? '' : 's'}.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border bg-background/70 p-3">
+            <input
+              type="checkbox"
+              checked={autoShare}
+              disabled={!canSync}
+              onChange={(event) => onAutoShareChange(event.target.checked)}
+              className="mt-1 size-4 accent-primary"
+            />
+            <span>
+              <span className="block font-semibold">Automatically include my weekly battery anonymously</span>
+              <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
+                When enabled, new battery check-ins automatically refresh your one anonymous weekly contribution.
+                Leaders do not see your alias or individual check-in history.
+              </span>
+            </span>
+          </label>
+        </div>
+      )}
 
       {role === 'leader' && (
         <div className="mt-5 border-t pt-5">
           <p className="font-semibold">Leadership dashboard · This week</p>
-          {submissions.length < privacyThreshold || organizationAverage === undefined ? (
+          {submissions.length < privacyThreshold || organizationAverage === undefined || averageLevel === undefined ? (
             <p className="mt-1 text-sm text-muted-foreground">
               {submissions.length} anonymous contributor{submissions.length === 1 ? '' : 's'} so far.
               {' '}The organization metric appears after at least {privacyThreshold} contributors.
             </p>
           ) : (
-            <div className="mt-3">
-              <div className="flex flex-wrap items-end justify-between gap-3">
-                <div>
-                  <p className="font-display text-4xl font-semibold">{organizationAverage.toFixed(1)} / 5</p>
-                  <p className="text-sm text-muted-foreground">
-                    Weekly restfulness · {submissions.length} anonymous contributors
-                  </p>
+            <div className="mt-4 space-y-5">
+              <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-secondary/45 p-4">
+                <div className="flex items-center gap-4">
+                  <BatteryGlyph level={averageLevel} size="lg" />
+                  <div>
+                    <p className="font-display text-4xl font-semibold">{organizationAverage.toFixed(1)} / 5</p>
+                    <p className="text-sm text-muted-foreground">
+                      Weekly restfulness · {submissions.length} anonymous contributors
+                    </p>
+                  </div>
                 </div>
-                <span className="text-4xl" aria-hidden>
-                  {organizationAverage < 1.5 ? '🪫' : organizationAverage < 2.5 ? '😟' : organizationAverage < 3.5 ? '🤔' : organizationAverage < 4.5 ? '🙂' : '🔋'}
-                </span>
               </div>
-              <div className="mt-4 grid grid-cols-5 gap-2" aria-label="Anonymous weekly battery distribution">
-                {[1, 2, 3, 4, 5].map((level) => {
-                  const count = submissions.filter((item) => Math.round(item.average) === level).length;
-                  return (
-                    <div key={level} className="rounded-lg bg-secondary/60 p-2 text-center">
-                      <p className="font-bold">{level}</p>
-                      <p className="text-xs text-muted-foreground">{count}</p>
-                    </div>
-                  );
-                })}
+
+              <div>
+                <p className="mb-3 text-sm font-semibold">Battery distribution</p>
+                <div className="grid grid-cols-5 gap-2" aria-label="Anonymous weekly battery distribution">
+                  {[1, 2, 3, 4, 5].map((level) => {
+                    const count = submissions.filter((item) => Math.round(item.average) === level).length;
+                    return (
+                      <div key={level} className="rounded-xl border bg-background/60 p-2 text-center">
+                        <BatteryGlyph level={level} size="md" className="mx-auto" />
+                        <p className="mt-2 text-xs font-semibold">{level} / 5</p>
+                        <p className="text-xs text-muted-foreground">
+                          {count} member{count === 1 ? '' : 's'}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           )}
           <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
-            Leaders never see which member submitted a score. Each contributor counts once through their current weekly average.
+            Each contributor counts once through their current weekly average. The dashboard does not display member aliases or individual battery histories.
           </p>
         </div>
       )}
