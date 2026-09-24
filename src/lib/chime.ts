@@ -1,6 +1,6 @@
 let ctx: AudioContext | undefined;
 
-function getContext(): AudioContext | undefined {
+export function getContext(): AudioContext | undefined {
   if (typeof window === 'undefined' || !('AudioContext' in window)) return undefined;
   ctx ??= new AudioContext();
   return ctx;
