@@ -1,8 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNostr } from '@nostrify/react';
 import { finalizeEvent } from 'nostr-tools/pure';
-import { useCallback } from 'react';
-
 import type { OrganizationMembership } from '@/lib/organization';
 import type { AlignmentScore, RestAgreement } from '@/lib/teamRest';
 
@@ -243,7 +241,7 @@ export function useOrganizationSync(membership: OrganizationMembership) {
     },
   });
 
-  const publishCovenant = useCallback(async (agreement: RestAgreement) => {
+  const publishCovenant = async (agreement: RestAgreement) => {
     if (
       membership.role !== 'leader' ||
       !membership.syncKey ||
@@ -266,9 +264,9 @@ export function useOrganizationSync(membership: OrganizationMembership) {
 
     await nostr.event(event, { signal: AbortSignal.timeout(5_000) });
     await covenantQuery.refetch();
-  }, [covenantQuery, membership, nostr, tag]);
+  };
 
-  const publishAlignment = useCallback(async (
+  const publishAlignment = async (
     agreementRevision: number,
     score: AlignmentScore,
     responseId: string,
@@ -300,10 +298,9 @@ export function useOrganizationSync(membership: OrganizationMembership) {
     }, hexToBytes(membership.memberSecretKey));
 
     await nostr.event(event, { signal: AbortSignal.timeout(5_000) });
-    await alignmentQuery.refetch();
-  }, [alignmentQuery, membership, nostr, tag]);
+  };
 
-  const publishWeeklyBattery = useCallback(async (
+  const publishWeeklyBattery = async (
     weekKey: string,
     average: number,
     samples: number,
@@ -332,8 +329,7 @@ export function useOrganizationSync(membership: OrganizationMembership) {
     }, hexToBytes(membership.memberSecretKey));
 
     await nostr.event(event, { signal: AbortSignal.timeout(5_000) });
-    await weeklyBatteryQuery.refetch();
-  }, [membership, nostr, tag, weeklyBatteryQuery]);
+  };
 
   return {
     canSync: enabled && Boolean(membership.memberSecretKey),
