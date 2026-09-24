@@ -1,765 +1,1056 @@
 import { useSeoMeta } from '@unhead/react';
 import {
   ArrowRight,
+  Building2,
   Check,
+  CheckCircle2,
+  Clipboard,
   CircleDashed,
   Handshake,
+  KeyRound,
+  LogOut,
   PauseCircle,
+  Plus,
   ShieldCheck,
   UsersRound,
 } from 'lucide-react';
-import { type FormEvent, useMemo, useState } from 'react';
+import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 
 import { AppShell } from '@/components/rest/AppShell';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import {
-  AGREEMENT_STARTER,
-  createDemoTeamRestState,
-  DEFAULT_TEAM_REST_STATE,
-  hasAcceptedCoverageConflict,
-  type AgreementFrame,
+  createOrganizationInvite,
+  DEFAULT_ORGANIZATION_DIRECTORY,
+  openOrganizationInvite,
+  type OrganizationDirectory,
+  type OrganizationMembership,
+} from '@/lib/organization';
+import {
+  agreementSummary,
+  createDemoOrganizationRestState,
+  DEFAULT_ORGANIZATION_REST_STATE,
   type CoverageItem,
-  type CoverageStatus,
+  type OrganizationRestState,
   type PulseAnswer,
-  type TeamRestState,
 } from '@/lib/teamRest';
 import { cn } from '@/lib/utils';
 
-const STORAGE_KEY = 'restivism:team-rest';
-type TeamStep = 'agree' | 'cover' | 'reflect';
+const DIRECTORY_KEY = 'restivism:organizations';
 
-const FRAME_LABELS: Record<AgreementFrame, string> = {
-  movement: 'Movement',
-  secular: 'Secular',
-  faith: 'Faith',
-};
-
-const STATUS_LABELS: Record<CoverageStatus, string> = {
-  proposed: 'Waiting for acceptance',
-  accepted: 'Covered',
-  'needs-change': 'Needs change',
-  paused: 'Work paused',
-};
-
-const PULSE_OPTIONS: Array<{ value: PulseAnswer; label: string; detail: string }> = [
-  { value: 'yes', label: 'Yes', detail: 'The plan held.' },
-  { value: 'partly', label: 'Partly', detail: 'Some coverage changed or fell through.' },
-  { value: 'no', label: 'No', detail: 'The plan did not protect the rest window.' },
-  { value: 'prefer-not', label: 'Prefer not to record', detail: 'Have the conversation without storing an answer.' },
-];
-
-function isTeamStep(value: string | null): value is TeamStep {
-  return value === 'agree' || value === 'cover' || value === 'reflect';
+function localDateValue() {
+  const now = new Date();
+  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 10);
 }
 
-function toLocalInputValue(timestamp: number) {
-  const date = new Date(timestamp);
-  const local = new Date(timestamp - date.getTimezoneOffset() * 60_000);
-  return local.toISOString().slice(0, 16);
-}
-
-function formatWindow(item: CoverageItem) {
-  const start = new Date(item.startsAt);
-  const end = new Date(item.endsAt);
-  const sameDay = start.toDateString() === end.toDateString();
-
-  const startText = start.toLocaleString([], {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-  const endText = end.toLocaleString([], sameDay
-    ? { hour: 'numeric', minute: '2-digit' }
-    : { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-
-  return `${startText} – ${endText}`;
+function sameName(a: string, b: string) {
+  return a.trim().toLocaleLowerCase() === b.trim().toLocaleLowerCase();
 }
 
 export default function TeamRest() {
   useSeoMeta({
-    title: 'Team rest | Restivism',
-    description: 'Turn rest into a team practice: agree on the norm, cover the work, then reflect together.',
+    title: 'Organization rest | Restivism',
+    description: 'Create or join an organization, protect rest with a simple agreement, cover the work, and reflect together.',
   });
 
-  // Privacy guideline: this state is deliberately device-local and is not published to Nostr.
-  const [state, setState] = useLocalStorage<TeamRestState>(STORAGE_KEY, DEFAULT_TEAM_REST_STATE);
-  const [searchParams, setSearchParams] = useSearchParams();
-  const requestedStep = searchParams.get('step');
-  const activeStep: TeamStep = isTeamStep(requestedStep) ? requestedStep : 'agree';
+  const [directory, setDirectory] = useLocalStorage<OrganizationDirectory>(
+    DIRECTORY_KEY,
+    DEFAULT_ORGANIZATION_DIRECTORY,
+  );
+  const [searchParams] = useSearchParams();
 
-  const [agreementDraft, setAgreementDraft] = useState(state.agreement.text || AGREEMENT_STARTER);
-  const [aliasDraft, setAliasDraft] = useState('');
-  const [responsibility, setResponsibility] = useState('');
-  const [restingAlias, setRestingAlias] = useState('');
-  const [coveringChoice, setCoveringChoice] = useState('');
-  const [startsAt, setStartsAt] = useState(() => toLocalInputValue(Date.now() + 60 * 60 * 1000));
-  const [endsAt, setEndsAt] = useState(() => toLocalInputValue(Date.now() + 3 * 60 * 60 * 1000));
-  const [currentStatus, setCurrentStatus] = useState('');
-  const [nextAction, setNextAction] = useState('');
-  const [limit, setLimit] = useState('');
-  const [reference, setReference] = useState('');
-  const [message, setMessage] = useState('');
-
-  const sortedCoverage = useMemo(
-    () => [...state.coverage].sort((a, b) => a.startsAt - b.startsAt),
-    [state.coverage],
+  const current = directory.memberships.find(
+    (membership) => membership.id === directory.currentOrganizationId,
   );
 
-  const chooseStep = (step: TeamStep) => {
-    setMessage('');
-    setSearchParams({ step });
-  };
-
-  const updateFrame = (frame: AgreementFrame) => {
-    setState((previous) => ({
+  const setCurrentOrganization = (organizationId: string) => {
+    setDirectory((previous) => ({
       ...previous,
-      agreement: { ...previous.agreement, frame },
+      currentOrganizationId: organizationId,
     }));
   };
 
-  const adoptAgreement = () => {
-    const text = agreementDraft.trim();
-    if (!text) {
-      setMessage('Write the agreement in your team’s own words before adopting it.');
-      return;
-    }
+  const addMembership = (membership: OrganizationMembership) => {
+    setDirectory((previous) => {
+      const existing = previous.memberships.find((item) => item.id === membership.id);
+      const merged: OrganizationMembership = existing
+        ? {
+            ...membership,
+            role: existing.role === 'leader' ? 'leader' : membership.role,
+            inviteCode: existing.inviteCode ?? membership.inviteCode,
+          }
+        : membership;
 
-    setState((previous) => ({
-      ...previous,
-      agreement: {
-        ...previous.agreement,
-        text,
-        revision: previous.agreement.revision + 1,
-        adoptedAt: Date.now(),
-      },
-    }));
-    setMessage('Team agreement adopted. Next, make sure rest has real coverage.');
-  };
-
-  const addAlias = (event: FormEvent) => {
-    event.preventDefault();
-    const alias = aliasDraft.trim();
-    if (!alias) return;
-
-    const exists = state.aliases.some((existing) => existing.toLocaleLowerCase() === alias.toLocaleLowerCase());
-    if (exists) {
-      setMessage('That alias is already on the team.');
-      return;
-    }
-
-    setState((previous) => ({
-      ...previous,
-      aliases: [...previous.aliases, alias],
-    }));
-    setAliasDraft('');
-    setMessage('');
-  };
-
-  const addCoverage = (event: FormEvent) => {
-    event.preventDefault();
-    const start = new Date(startsAt).getTime();
-    const end = new Date(endsAt).getTime();
-    const isPause = coveringChoice === '__pause__';
-    const coverer = isPause ? undefined : coveringChoice;
-
-    if (!responsibility.trim() || !restingAlias || !coveringChoice || Number.isNaN(start) || Number.isNaN(end)) {
-      setMessage('Add the responsibility, who is resting, what happens to the work, and the time window.');
-      return;
-    }
-    if (end <= start) {
-      setMessage('The coverage window needs to end after it starts.');
-      return;
-    }
-    if (coverer && coverer === restingAlias) {
-      setMessage('The person resting cannot also be their own coverage.');
-      return;
-    }
-
-    // Coverage guideline: a named handoff starts as proposed and never silently counts as accepted.
-    const item: CoverageItem = {
-      id: crypto.randomUUID(),
-      responsibility: responsibility.trim(),
-      restingAlias,
-      coveringAlias: coverer,
-      startsAt: start,
-      endsAt: end,
-      status: isPause ? 'paused' : 'proposed',
-      handover: {
-        currentStatus: currentStatus.trim(),
-        nextAction: nextAction.trim(),
-        limit: limit.trim(),
-        reference: reference.trim(),
-      },
-    };
-
-    setState((previous) => ({
-      ...previous,
-      coverage: [...previous.coverage, item],
-    }));
-
-    setResponsibility('');
-    setCoveringChoice('');
-    setCurrentStatus('');
-    setNextAction('');
-    setLimit('');
-    setReference('');
-    setMessage(isPause ? 'Work paused by agreement.' : 'Coverage proposed. The receiving person still needs to accept it.');
-  };
-
-  const changeCoverageStatus = (id: string, status: CoverageStatus) => {
-    const candidate = state.coverage.find((item) => item.id === id);
-    if (!candidate) return;
-
-    if (status === 'accepted' && hasAcceptedCoverageConflict(state.coverage, candidate)) {
-      setMessage(`${candidate.coveringAlias} already has accepted coverage during part of this window.`);
-      return;
-    }
-
-    setState((previous) => ({
-      ...previous,
-      coverage: previous.coverage.map((item) => (item.id === id ? { ...item, status } : item)),
-    }));
-    setMessage(status === 'accepted' ? 'Coverage accepted.' : STATUS_LABELS[status]);
-  };
-
-  const removeCoverage = (id: string) => {
-    setState((previous) => ({
-      ...previous,
-      coverage: previous.coverage.filter((item) => item.id !== id),
-    }));
-    setMessage('');
-  };
-
-  const recordPulse = (answer: PulseAnswer) => {
-    if (answer === 'prefer-not') {
-      setState((previous) => ({
+      return {
         ...previous,
-        pulse: undefined,
-      }));
-      setMessage('Nothing recorded. You can still have the conversation together.');
+        memberships: [
+          ...previous.memberships.filter((item) => item.id !== merged.id),
+          merged,
+        ],
+        currentOrganizationId: merged.id,
+      };
+    });
+  };
+
+  const leaveOrganization = (organizationId: string) => {
+    if (!window.confirm('Leave this organization on this device? You can only get back in with its invite code and passcode.')) {
       return;
     }
 
-    setState((previous) => ({
-      ...previous,
-      pulse: { answer, recordedAt: Date.now() },
-    }));
-    setMessage('Team reflection recorded on this device.');
-  };
-
-  const loadExample = () => {
-    const example = createDemoTeamRestState();
-    setState(example);
-    setAgreementDraft(example.agreement.text);
-    setRestingAlias('Cedar');
-    setMessage('Loaded a fictional Cedar / Birch / Ash example. Nothing was sent anywhere.');
-  };
-
-  const clearTeamData = () => {
-    if (!window.confirm('Clear the local team agreement, aliases, coverage, and reflection from this browser?')) return;
-    setState(DEFAULT_TEAM_REST_STATE);
-    setAgreementDraft(AGREEMENT_STARTER);
-    setRestingAlias('');
-    setMessage('Team data cleared from this browser.');
+    setDirectory((previous) => {
+      const memberships = previous.memberships.filter((item) => item.id !== organizationId);
+      return {
+        ...previous,
+        memberships,
+        currentOrganizationId: memberships[0]?.id,
+      };
+    });
   };
 
   return (
     <AppShell>
-      <div className="mx-auto max-w-3xl space-y-6 px-4 py-8 sm:px-6 sm:py-12">
-        <section className="overflow-hidden rounded-3xl border bg-card shadow-sm">
-          <div className="bg-gradient-to-br from-primary/12 via-card to-ember/10 p-6 sm:p-8">
-            <div className="flex items-start gap-4">
-              <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-primary text-primary-foreground shadow-sm">
-                <UsersRound className="size-6" aria-hidden />
-              </span>
-              <div className="space-y-2">
-                <p className="text-sm font-bold uppercase tracking-widest text-primary">Team rest</p>
-                <h1 className="text-4xl font-semibold leading-tight sm:text-5xl">Make room for people to actually rest.</h1>
-                <p className="max-w-2xl text-lg leading-relaxed text-muted-foreground">
-                  Personal rest works better when the team protects it. Agree on the norm, cover the work, then reflect together.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-3 border-t" aria-label="Team rest steps">
-            <StepButton number="1" label="Agree" active={activeStep === 'agree'} onClick={() => chooseStep('agree')} />
-            <StepButton number="2" label="Cover" active={activeStep === 'cover'} onClick={() => chooseStep('cover')} />
-            <StepButton number="3" label="Reflect" active={activeStep === 'reflect'} onClick={() => chooseStep('reflect')} />
-          </div>
-        </section>
-
-        {message && (
-          <div className="rounded-xl border border-primary/20 bg-secondary/60 px-4 py-3 text-base" role="status">
-            {message}
-          </div>
-        )}
-
-        {activeStep === 'agree' && (
-          <section className="space-y-6 rounded-2xl border bg-card p-5 shadow-sm sm:p-8" aria-labelledby="agree-heading">
-            <div className="space-y-2">
-              <p className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-primary">
-                <ShieldCheck className="size-5" aria-hidden />
-                Step 1
-              </p>
-              <h2 id="agree-heading" className="text-3xl font-semibold">Agree on what protected rest means.</h2>
-              <p className="text-lg leading-relaxed text-muted-foreground">
-                Keep it short enough that the team can remember it. The important decisions are what rest protects and what happens when nobody has capacity.
-              </p>
-            </div>
-
-            <div className="space-y-3">
-              <p className="font-semibold">Choose the framing that fits your team.</p>
-              <div className="flex flex-wrap gap-2">
-                {(Object.keys(FRAME_LABELS) as AgreementFrame[]).map((frame) => (
-                  <button
-                    key={frame}
-                    type="button"
-                    aria-pressed={state.agreement.frame === frame}
-                    onClick={() => updateFrame(frame)}
-                    className={cn(
-                      'rounded-full border px-4 py-2 text-base font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                      state.agreement.frame === frame ? 'border-primary bg-primary text-primary-foreground' : 'hover:bg-secondary',
-                    )}
-                  >
-                    {FRAME_LABELS[frame]}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <label className="block space-y-2">
-              <span className="font-semibold">Our team agreement</span>
-              <textarea
-                value={agreementDraft}
-                onChange={(event) => setAgreementDraft(event.target.value)}
-                rows={7}
-                maxLength={1200}
-                className="w-full rounded-xl border bg-background px-4 py-3 text-lg leading-relaxed outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-ring"
-              />
-            </label>
-
-            <div className="rounded-xl bg-secondary/60 p-4">
-              <p className="font-semibold">Two questions to settle together</p>
-              <ul className="mt-2 list-disc space-y-1 pl-6 text-base text-muted-foreground">
-                <li>What does protected rest mean in our work?</li>
-                <li>What will we pause, reduce, or postpone when nobody can cover?</li>
-              </ul>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={adoptAgreement}
-                className="inline-flex h-12 items-center gap-2 rounded-full bg-primary px-6 text-base font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <Check className="size-5" aria-hidden />
-                Adopt this agreement
-              </button>
-              {state.agreement.revision > 0 && (
-                <span className="text-base text-muted-foreground">
-                  Revision {state.agreement.revision} · adopted {new Date(state.agreement.adoptedAt ?? 0).toLocaleDateString()}
-                </span>
-              )}
-            </div>
-
-            {state.agreement.revision === 0 && state.coverage.length === 0 && (
-              <button
-                type="button"
-                onClick={loadExample}
-                className="text-base font-semibold text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                Or load a fictional Cedar / Birch / Ash example
-              </button>
-            )}
-
-            <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={() => chooseStep('cover')}
-                className="inline-flex items-center gap-2 rounded-full px-4 py-2 font-semibold text-primary hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                Next: cover the work <ArrowRight className="size-4" aria-hidden />
-              </button>
-            </div>
-          </section>
-        )}
-
-        {activeStep === 'cover' && (
-          <section className="space-y-6" aria-labelledby="cover-heading">
-            <div className="rounded-2xl border bg-card p-5 shadow-sm sm:p-8">
-              <div className="space-y-2">
-                <p className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-primary">
-                  <Handshake className="size-5" aria-hidden />
-                  Step 2
-                </p>
-                <h2 id="cover-heading" className="text-3xl font-semibold">Cover the work, not the person.</h2>
-                <p className="text-lg leading-relaxed text-muted-foreground">
-                  Use aliases by default. A handoff is only covered after the receiving person accepts it. If nobody has capacity, pause the work instead.
-                </p>
-              </div>
-
-              <form onSubmit={addAlias} className="mt-6 space-y-2">
-                <label htmlFor="team-alias" className="font-semibold">Who is on this team?</label>
-                <div className="flex gap-2">
-                  <input
-                    id="team-alias"
-                    value={aliasDraft}
-                    onChange={(event) => setAliasDraft(event.target.value)}
-                    maxLength={32}
-                    placeholder="Add an alias, e.g. Cedar"
-                    className="min-w-0 flex-1 rounded-xl border bg-background px-4 py-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  />
-                  <button
-                    type="submit"
-                    className="rounded-xl border px-4 py-3 font-semibold transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    Add
-                  </button>
-                </div>
-              </form>
-
-              {state.aliases.length > 0 && (
-                <div className="mt-3 flex flex-wrap gap-2" aria-label="Team aliases">
-                  {state.aliases.map((alias) => (
-                    <span key={alias} className="rounded-full bg-secondary px-3 py-1.5 text-sm font-semibold">{alias}</span>
-                  ))}
-                </div>
-              )}
-
-              <form onSubmit={addCoverage} className="mt-8 space-y-5 border-t pt-6">
-                <label className="block space-y-2">
-                  <span className="font-semibold">What needs coverage?</span>
-                  <input
-                    value={responsibility}
-                    onChange={(event) => setResponsibility(event.target.value)}
-                    maxLength={120}
-                    placeholder="Community contact, public updates, meeting…"
-                    className="w-full rounded-xl border bg-background px-4 py-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  />
-                </label>
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <label className="block space-y-2">
-                    <span className="font-semibold">Who is resting?</span>
-                    <select
-                      value={restingAlias}
-                      onChange={(event) => setRestingAlias(event.target.value)}
-                      className="w-full rounded-xl border bg-background px-4 py-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      <option value="">Choose an alias</option>
-                      {state.aliases.map((alias) => <option key={alias} value={alias}>{alias}</option>)}
-                    </select>
-                  </label>
-
-                  <label className="block space-y-2">
-                    <span className="font-semibold">What happens to the work?</span>
-                    <select
-                      value={coveringChoice}
-                      onChange={(event) => setCoveringChoice(event.target.value)}
-                      className="w-full rounded-xl border bg-background px-4 py-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      <option value="">Choose coverage</option>
-                      {state.aliases
-                        .filter((alias) => alias !== restingAlias)
-                        .map((alias) => <option key={alias} value={alias}>{alias} can cover</option>)}
-                      <option value="__pause__">Nobody has capacity — pause it</option>
-                    </select>
-                  </label>
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <label className="block space-y-2">
-                    <span className="font-semibold">Starts</span>
-                    <input
-                      type="datetime-local"
-                      value={startsAt}
-                      onChange={(event) => setStartsAt(event.target.value)}
-                      className="w-full rounded-xl border bg-background px-4 py-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    />
-                  </label>
-                  <label className="block space-y-2">
-                    <span className="font-semibold">Ends</span>
-                    <input
-                      type="datetime-local"
-                      value={endsAt}
-                      onChange={(event) => setEndsAt(event.target.value)}
-                      className="w-full rounded-xl border bg-background px-4 py-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    />
-                  </label>
-                </div>
-
-                <details className="rounded-xl border bg-background/60 p-4">
-                  <summary className="cursor-pointer font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                    Add a short handoff <span className="font-normal text-muted-foreground">— optional</span>
-                  </summary>
-                  <div className="mt-4 grid gap-4">
-                    <HandoverField label="Current status" value={currentStatus} onChange={setCurrentStatus} placeholder="Where does this stand?" />
-                    <HandoverField label="Next bounded action" value={nextAction} onChange={setNextAction} placeholder="What is the one next action?" />
-                    <HandoverField label="Agreed limit" value={limit} onChange={setLimit} placeholder="What should not expand while they rest?" />
-                    <HandoverField label="Essential reference" value={reference} onChange={setReference} placeholder="Point to something they already have access to." />
-                  </div>
-                </details>
-
-                <button
-                  type="submit"
-                  disabled={state.aliases.length === 0}
-                  className="inline-flex h-12 items-center gap-2 rounded-full bg-primary px-6 text-base font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <Handshake className="size-5" aria-hidden />
-                  {coveringChoice === '__pause__' ? 'Pause this work' : 'Propose coverage'}
-                </button>
-              </form>
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex items-end justify-between gap-4">
-                <div>
-                  <h3 className="text-2xl font-semibold">Coverage plan</h3>
-                  <p className="text-base text-muted-foreground">Proposed is not the same as accepted.</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => chooseStep('reflect')}
-                  className="hidden items-center gap-2 rounded-full px-4 py-2 font-semibold text-primary hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:inline-flex"
-                >
-                  Reflect <ArrowRight className="size-4" aria-hidden />
-                </button>
-              </div>
-
-              {sortedCoverage.length === 0 ? (
-                <div className="rounded-2xl border border-dashed bg-card/60 px-6 py-10 text-center">
-                  <CircleDashed className="mx-auto size-7 text-muted-foreground" aria-hidden />
-                  <p className="mt-3 font-semibold">No coverage planned yet.</p>
-                  <p className="mx-auto mt-1 max-w-md text-base text-muted-foreground">
-                    Start with one real rest window. You do not need to schedule the whole organization.
-                  </p>
-                </div>
-              ) : (
-                sortedCoverage.map((item) => (
-                  <CoverageCard
-                    key={item.id}
-                    item={item}
-                    onStatus={(status) => changeCoverageStatus(item.id, status)}
-                    onRemove={() => removeCoverage(item.id)}
-                  />
-                ))
-              )}
-            </div>
-          </section>
-        )}
-
-        {activeStep === 'reflect' && (
-          <section className="space-y-6 rounded-2xl border bg-card p-5 shadow-sm sm:p-8" aria-labelledby="reflect-heading">
-            <div className="space-y-2">
-              <p className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-primary">
-                <UsersRound className="size-5" aria-hidden />
-                Step 3
-              </p>
-              <h2 id="reflect-heading" className="text-3xl font-semibold">Did our coverage plan hold?</h2>
-              <p className="text-lg leading-relaxed text-muted-foreground">
-                Answer once as a team. This is a conversation aid, not an individual wellness score.
-              </p>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              {PULSE_OPTIONS.map((option) => {
-                const selected = option.value !== 'prefer-not' && state.pulse?.answer === option.value;
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    aria-pressed={selected}
-                    onClick={() => recordPulse(option.value)}
-                    className={cn(
-                      'rounded-2xl border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                      selected ? 'border-primary bg-secondary' : 'hover:bg-secondary/60',
-                    )}
-                  >
-                    <span className="block font-semibold">{option.label}</span>
-                    <span className="mt-1 block text-base text-muted-foreground">{option.detail}</span>
-                  </button>
-                );
-              })}
-            </div>
-
-            {state.pulse && (
-              <p className="rounded-xl bg-secondary/60 p-4 text-base">
-                Last shared answer: <strong>{PULSE_OPTIONS.find((option) => option.value === state.pulse?.answer)?.label}</strong>
-                {' · '}
-                {new Date(state.pulse.recordedAt).toLocaleString()}
-              </p>
-            )}
-
-            <div className="rounded-xl border border-dashed p-4 text-base text-muted-foreground">
-              <strong className="text-foreground">Privacy note:</strong> team-rest data stays in this browser and is not published to Nostr.
-              Browser storage is not encrypted, so use aliases and keep handoffs minimal—no passwords, beneficiary identities, case histories, or precise sensitive locations.
-            </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-5">
-              <Link
-                to="/"
-                className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 font-semibold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                Back to my rest
-              </Link>
-              <button
-                type="button"
-                onClick={clearTeamData}
-                className="rounded-full px-4 py-2 text-base font-semibold text-muted-foreground hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                Clear team data
-              </button>
-            </div>
-          </section>
-        )}
-      </div>
+      {!current ? (
+        <OrganizationGate
+          memberships={directory.memberships}
+          onSelect={setCurrentOrganization}
+          onJoin={addMembership}
+        />
+      ) : (
+        <OrganizationWorkspace
+          key={current.id}
+          membership={current}
+          memberships={directory.memberships}
+          requestedFocus={searchParams.get('focus')}
+          onSelectOrganization={setCurrentOrganization}
+          onLeave={() => leaveOrganization(current.id)}
+        />
+      )}
     </AppShell>
   );
 }
 
-function StepButton({
-  number,
-  label,
-  active,
-  onClick,
+function OrganizationGate({
+  memberships,
+  onSelect,
+  onJoin,
 }: {
-  number: string;
-  label: string;
-  active: boolean;
-  onClick: () => void;
+  memberships: OrganizationMembership[];
+  onSelect: (organizationId: string) => void;
+  onJoin: (membership: OrganizationMembership) => void;
+}) {
+  const [mode, setMode] = useState<'create' | 'join'>('create');
+  const [organizationName, setOrganizationName] = useState('');
+  const [alias, setAlias] = useState('');
+  const [passcode, setPasscode] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+
+  const createOrganization = async (event: FormEvent) => {
+    event.preventDefault();
+    const name = organizationName.trim();
+    const person = alias.trim();
+
+    if (!name || !person) {
+      setMessage('Add your organization name and the name or alias you want to use.');
+      return;
+    }
+    if (passcode.length < 6) {
+      setMessage('Choose a passcode with at least 6 characters.');
+      return;
+    }
+
+    setBusy(true);
+    setMessage('');
+
+    try {
+      const result = await createOrganizationInvite(name, passcode);
+      onJoin({
+        id: result.organization.id,
+        name: result.organization.name,
+        alias: person,
+        role: 'leader',
+        joinedAt: Date.now(),
+        inviteCode: result.inviteCode,
+      });
+    } catch {
+      setMessage('Could not create the organization on this device.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const joinOrganization = async (event: FormEvent) => {
+    event.preventDefault();
+    const person = alias.trim();
+
+    if (!inviteCode.trim() || !person || !passcode) {
+      setMessage('Paste the organization invite, enter the passcode, and choose your name or alias.');
+      return;
+    }
+
+    setBusy(true);
+    setMessage('');
+
+    try {
+      const organization = await openOrganizationInvite(inviteCode, passcode);
+      onJoin({
+        id: organization.id,
+        name: organization.name,
+        alias: person,
+        role: 'member',
+        joinedAt: Date.now(),
+      });
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not join that organization.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="mx-auto max-w-3xl space-y-6 px-4 py-8 sm:px-6 sm:py-12">
+      <section className="overflow-hidden rounded-3xl border bg-card shadow-sm">
+        <div className="bg-gradient-to-br from-primary/12 via-card to-ember/10 p-6 sm:p-8">
+          <div className="flex items-start gap-4">
+            <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-primary text-primary-foreground shadow-sm">
+              <Building2 className="size-6" aria-hidden />
+            </span>
+            <div className="space-y-2">
+              <p className="text-sm font-bold uppercase tracking-widest text-primary">Organization rest</p>
+              <h1 className="text-4xl font-semibold leading-tight sm:text-5xl">Rest works better when the team protects it.</h1>
+              <p className="max-w-2xl text-lg leading-relaxed text-muted-foreground">
+                Create your organization or join one with the passcode your organization leader created.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {memberships.length > 0 && (
+        <section className="rounded-2xl border bg-card p-5 shadow-sm sm:p-6">
+          <p className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Already on this device</p>
+          <div className="mt-3 grid gap-2">
+            {memberships.map((membership) => (
+              <button
+                key={membership.id}
+                type="button"
+                onClick={() => onSelect(membership.id)}
+                className="flex items-center justify-between gap-4 rounded-xl border px-4 py-3 text-left transition-colors hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <span>
+                  <span className="block font-semibold">{membership.name}</span>
+                  <span className="block text-sm text-muted-foreground">
+                    {membership.alias} · {membership.role === 'leader' ? 'Leader' : 'Member'}
+                  </span>
+                </span>
+                <ArrowRight className="size-5 text-primary" aria-hidden />
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section className="rounded-2xl border bg-card p-5 shadow-sm sm:p-8">
+        <div className="grid grid-cols-2 rounded-xl bg-secondary/60 p-1">
+          <button
+            type="button"
+            onClick={() => {
+              setMode('create');
+              setMessage('');
+            }}
+            className={cn(
+              'rounded-lg px-4 py-2.5 text-base font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              mode === 'create' && 'bg-card text-primary shadow-sm',
+            )}
+          >
+            Create organization
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setMode('join');
+              setMessage('');
+            }}
+            className={cn(
+              'rounded-lg px-4 py-2.5 text-base font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              mode === 'join' && 'bg-card text-primary shadow-sm',
+            )}
+          >
+            Join organization
+          </button>
+        </div>
+
+        {message && (
+          <p className="mt-4 rounded-xl border border-primary/20 bg-secondary/50 px-4 py-3 text-base" role="status">
+            {message}
+          </p>
+        )}
+
+        {mode === 'create' ? (
+          <form onSubmit={createOrganization} className="mt-6 space-y-5">
+            <div className="space-y-2">
+              <h2 className="text-3xl font-semibold">Create your organization</h2>
+              <p className="text-lg text-muted-foreground">
+                The leader chooses one passcode. Members will need both the invite code and that passcode to join.
+              </p>
+            </div>
+
+            <label className="block space-y-2">
+              <span className="font-semibold">Organization name</span>
+              <input
+                value={organizationName}
+                onChange={(event) => setOrganizationName(event.target.value)}
+                maxLength={80}
+                placeholder="Community Care Collective"
+                className="w-full rounded-xl border bg-background px-4 py-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+            </label>
+
+            <label className="block space-y-2">
+              <span className="font-semibold">Your name or alias</span>
+              <input
+                value={alias}
+                onChange={(event) => setAlias(event.target.value)}
+                maxLength={40}
+                placeholder="Cedar"
+                className="w-full rounded-xl border bg-background px-4 py-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+            </label>
+
+            <label className="block space-y-2">
+              <span className="flex items-center gap-2 font-semibold">
+                <KeyRound className="size-4" aria-hidden />
+                Organization passcode
+              </span>
+              <input
+                type="password"
+                value={passcode}
+                onChange={(event) => setPasscode(event.target.value)}
+                minLength={6}
+                autoComplete="new-password"
+                placeholder="At least 6 characters"
+                className="w-full rounded-xl border bg-background px-4 py-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+              <span className="block text-sm text-muted-foreground">
+                Restivism does not put the passcode inside the invite code.
+              </span>
+            </label>
+
+            <button
+              type="submit"
+              disabled={busy}
+              className="inline-flex h-12 items-center gap-2 rounded-full bg-primary px-6 text-base font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <Building2 className="size-5" aria-hidden />
+              {busy ? 'Creating…' : 'Create organization'}
+            </button>
+          </form>
+        ) : (
+          <form onSubmit={joinOrganization} className="mt-6 space-y-5">
+            <div className="space-y-2">
+              <h2 className="text-3xl font-semibold">Join your organization</h2>
+              <p className="text-lg text-muted-foreground">
+                Ask your organization leader for the invite code and the separate passcode.
+              </p>
+            </div>
+
+            <label className="block space-y-2">
+              <span className="font-semibold">Organization invite code</span>
+              <textarea
+                value={inviteCode}
+                onChange={(event) => setInviteCode(event.target.value)}
+                rows={4}
+                spellCheck={false}
+                placeholder="Paste the invite code here"
+                className="w-full rounded-xl border bg-background px-4 py-3 font-mono text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+            </label>
+
+            <label className="block space-y-2">
+              <span className="font-semibold">Passcode</span>
+              <input
+                type="password"
+                value={passcode}
+                onChange={(event) => setPasscode(event.target.value)}
+                autoComplete="current-password"
+                placeholder="Passcode from your organization leader"
+                className="w-full rounded-xl border bg-background px-4 py-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+            </label>
+
+            <label className="block space-y-2">
+              <span className="font-semibold">Your name or alias</span>
+              <input
+                value={alias}
+                onChange={(event) => setAlias(event.target.value)}
+                maxLength={40}
+                placeholder="Birch"
+                className="w-full rounded-xl border bg-background px-4 py-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+            </label>
+
+            <button
+              type="submit"
+              disabled={busy}
+              className="inline-flex h-12 items-center gap-2 rounded-full bg-primary px-6 text-base font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <KeyRound className="size-5" aria-hidden />
+              {busy ? 'Joining…' : 'Join organization'}
+            </button>
+          </form>
+        )}
+      </section>
+
+      <p className="px-2 text-sm leading-relaxed text-muted-foreground">
+        Prototype note: the invite + passcode controls organization membership, and each organization gets a separate local data space.
+        Ongoing cross-device synchronization is not enabled in this branch yet.
+      </p>
+    </div>
+  );
+}
+
+function OrganizationWorkspace({
+  membership,
+  memberships,
+  requestedFocus,
+  onSelectOrganization,
+  onLeave,
+}: {
+  membership: OrganizationMembership;
+  memberships: OrganizationMembership[];
+  requestedFocus: string | null;
+  onSelectOrganization: (organizationId: string) => void;
+  onLeave: () => void;
+}) {
+  const storageKey = `restivism:organization:${membership.id}:rest`;
+  const [state, setState] = useLocalStorage<OrganizationRestState>(
+    storageKey,
+    DEFAULT_ORGANIZATION_REST_STATE,
+  );
+
+  const coverageRef = useRef<HTMLElement>(null);
+  const [editingAgreement, setEditingAgreement] = useState(state.agreement.revision === 0);
+  const [agreementNote, setAgreementNote] = useState(state.agreement.note);
+  const [restingPerson, setRestingPerson] = useState(membership.alias);
+  const [work, setWork] = useState('');
+  const [coverageAction, setCoverageAction] = useState<'cover' | 'pause'>('cover');
+  const [coveringPerson, setCoveringPerson] = useState('');
+  const [date, setDate] = useState(localDateValue);
+  const [handoffNote, setHandoffNote] = useState('');
+  const [showCoverageForm, setShowCoverageForm] = useState(false);
+  const [message, setMessage] = useState('');
+  const [showInvite, setShowInvite] = useState(false);
+
+  useEffect(() => {
+    if (requestedFocus !== 'coverage') return;
+    setShowCoverageForm(true);
+    const id = window.setTimeout(() => {
+      coverageRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
+    return () => window.clearTimeout(id);
+  }, [requestedFocus]);
+
+  const saveAgreement = () => {
+    setState((previous) => ({
+      ...previous,
+      agreement: {
+        ...previous.agreement,
+        note: agreementNote.trim(),
+        revision: previous.agreement.revision + 1,
+        adoptedAt: Date.now(),
+      },
+    }));
+    setEditingAgreement(false);
+    setMessage('Rest agreement saved for this organization.');
+  };
+
+  const toggleAgreementPromise = (
+    field: 'protectedRest' | 'acceptedCoverage' | 'pauseWhenFull',
+  ) => {
+    setState((previous) => ({
+      ...previous,
+      agreement: {
+        ...previous.agreement,
+        [field]: !previous.agreement[field],
+      },
+    }));
+  };
+
+  const addCoverage = (event: FormEvent) => {
+    event.preventDefault();
+
+    if (!restingPerson.trim() || !work.trim() || !date) {
+      setMessage('Add who is resting, what needs attention, and the day.');
+      return;
+    }
+    if (coverageAction === 'cover' && !coveringPerson.trim()) {
+      setMessage('Add who can cover, or choose “Pause this work.”');
+      return;
+    }
+    if (coverageAction === 'cover' && sameName(restingPerson, coveringPerson)) {
+      setMessage('The person resting cannot also cover their own work.');
+      return;
+    }
+
+    const item: CoverageItem = {
+      id: crypto.randomUUID(),
+      restingPerson: restingPerson.trim(),
+      work: work.trim(),
+      coveringPerson: coverageAction === 'cover' ? coveringPerson.trim() : undefined,
+      date,
+      note: handoffNote.trim(),
+      status: coverageAction === 'pause' ? 'paused' : 'waiting',
+    };
+
+    setState((previous) => ({
+      ...previous,
+      coverage: [item, ...previous.coverage],
+    }));
+
+    setWork('');
+    setCoveringPerson('');
+    setHandoffNote('');
+    setCoverageAction('cover');
+    setShowCoverageForm(false);
+    setMessage(
+      item.status === 'paused'
+        ? 'That work is paused so the rest window can stay protected.'
+        : 'Coverage request added. It is not covered until the handoff is accepted.',
+    );
+  };
+
+  const markCovered = (itemId: string) => {
+    setState((previous) => ({
+      ...previous,
+      coverage: previous.coverage.map((item) => (
+        item.id === itemId ? { ...item, status: 'covered' } : item
+      )),
+    }));
+    setMessage('Coverage accepted.');
+  };
+
+  const removeCoverage = (itemId: string) => {
+    setState((previous) => ({
+      ...previous,
+      coverage: previous.coverage.filter((item) => item.id !== itemId),
+    }));
+  };
+
+  const recordPulse = (answer: PulseAnswer) => {
+    setState((previous) => ({
+      ...previous,
+      pulse: {
+        answer,
+        recordedAt: Date.now(),
+      },
+    }));
+    setMessage('Organization check-in saved on this device.');
+  };
+
+  const copyInvite = async () => {
+    if (!membership.inviteCode) return;
+
+    try {
+      await navigator.clipboard.writeText(membership.inviteCode);
+      setMessage('Invite code copied. Share the passcode separately.');
+    } catch {
+      setShowInvite(true);
+      setMessage('Copy the invite code below and share the passcode separately.');
+    }
+  };
+
+  const loadDemo = () => {
+    setState(createDemoOrganizationRestState());
+    setAgreementNote('We protect rest without making someone else silently carry too much.');
+    setEditingAgreement(false);
+    setMessage('Loaded fictional Cedar / Birch demo data for this organization.');
+  };
+
+  return (
+    <div className="mx-auto max-w-3xl space-y-6 px-4 py-8 sm:px-6 sm:py-12">
+      <section className="rounded-3xl border bg-card p-5 shadow-sm sm:p-7">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex min-w-0 items-start gap-3">
+            <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-primary text-primary-foreground">
+              <Building2 className="size-5" aria-hidden />
+            </span>
+            <div className="min-w-0">
+              <p className="text-sm font-bold uppercase tracking-widest text-primary">
+                {membership.role === 'leader' ? 'Organization leader' : 'Organization member'}
+              </p>
+              <h1 className="truncate text-3xl font-semibold sm:text-4xl">{membership.name}</h1>
+              <p className="text-base text-muted-foreground">You are here as {membership.alias}.</p>
+            </div>
+          </div>
+
+          {memberships.length > 1 && (
+            <label className="space-y-1 text-sm font-semibold text-muted-foreground">
+              <span className="block">Switch organization</span>
+              <select
+                value={membership.id}
+                onChange={(event) => onSelectOrganization(event.target.value)}
+                className="rounded-xl border bg-background px-3 py-2 text-base text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {memberships.map((item) => (
+                  <option key={item.id} value={item.id}>{item.name}</option>
+                ))}
+              </select>
+            </label>
+          )}
+        </div>
+
+        {membership.role === 'leader' && membership.inviteCode && (
+          <div className="mt-5 flex flex-wrap items-center gap-2 border-t pt-5">
+            <button
+              type="button"
+              onClick={copyInvite}
+              className="inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-bold transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <Clipboard className="size-4" aria-hidden />
+              Copy member invite
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowInvite((visible) => !visible)}
+              className="rounded-full px-4 py-2 text-sm font-semibold text-muted-foreground hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {showInvite ? 'Hide invite' : 'Show invite'}
+            </button>
+          </div>
+        )}
+
+        {showInvite && membership.inviteCode && (
+          <div className="mt-4 rounded-xl bg-secondary/60 p-4">
+            <p className="font-semibold">Organization invite code</p>
+            <p className="mt-2 break-all font-mono text-xs leading-relaxed">{membership.inviteCode}</p>
+            <p className="mt-3 text-sm text-muted-foreground">
+              Send the passcode separately. The passcode is not contained in this code.
+            </p>
+          </div>
+        )}
+      </section>
+
+      {message && (
+        <div className="rounded-xl border border-primary/20 bg-secondary/50 px-4 py-3 text-base" role="status">
+          {message}
+        </div>
+      )}
+
+      <section className="rounded-2xl border bg-card p-5 shadow-sm sm:p-7">
+        <div className="flex items-start gap-3">
+          <span className="grid size-9 shrink-0 place-items-center rounded-full bg-secondary text-primary">
+            <ShieldCheck className="size-5" aria-hidden />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-bold uppercase tracking-widest text-muted-foreground">1 · Agree</p>
+            <h2 className="text-2xl font-semibold">Our rest agreement</h2>
+            <p className="text-base text-muted-foreground">
+              A simple covenant: three promises the team can actually remember.
+            </p>
+          </div>
+        </div>
+
+        {editingAgreement ? (
+          <div className="mt-5 space-y-4">
+            <AgreementPromise
+              checked={state.agreement.protectedRest}
+              onChange={() => toggleAgreementPromise('protectedRest')}
+              title="Rest time is protected."
+              detail="We do not quietly pull someone back into the work during agreed rest."
+            />
+            <AgreementPromise
+              checked={state.agreement.acceptedCoverage}
+              onChange={() => toggleAgreementPromise('acceptedCoverage')}
+              title="Coverage must be accepted."
+              detail="Naming someone does not count as coverage until they agree."
+            />
+            <AgreementPromise
+              checked={state.agreement.pauseWhenFull}
+              onChange={() => toggleAgreementPromise('pauseWhenFull')}
+              title="If nobody has capacity, the work can wait."
+              detail="We pause, reduce, or postpone nonessential work instead of overloading someone else."
+            />
+
+            <label className="block space-y-2">
+              <span className="font-semibold">One sentence in your own words <span className="font-normal text-muted-foreground">(optional)</span></span>
+              <input
+                value={agreementNote}
+                onChange={(event) => setAgreementNote(event.target.value)}
+                maxLength={240}
+                placeholder="What do we want to remember when things get busy?"
+                className="w-full rounded-xl border bg-background px-4 py-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+            </label>
+
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={saveAgreement}
+                className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 font-semibold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <Check className="size-4" aria-hidden />
+                Save agreement
+              </button>
+              {state.agreement.revision > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAgreementNote(state.agreement.note);
+                    setEditingAgreement(false);
+                  }}
+                  className="rounded-full px-4 py-2.5 font-semibold text-muted-foreground hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="mt-5 space-y-4">
+            <div className="rounded-xl bg-secondary/55 p-4">
+              <p className="font-semibold">{agreementSummary(state.agreement)}</p>
+              {state.agreement.note && (
+                <p className="mt-2 text-base text-muted-foreground">“{state.agreement.note}”</p>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setEditingAgreement(true)}
+                className="rounded-full border px-4 py-2 text-sm font-bold hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                Edit agreement
+              </button>
+              <span className="text-sm text-muted-foreground">
+                Revision {state.agreement.revision}
+                {state.agreement.adoptedAt ? ` · ${new Date(state.agreement.adoptedAt).toLocaleDateString()}` : ''}
+              </span>
+            </div>
+          </div>
+        )}
+      </section>
+
+      <section ref={coverageRef} className="scroll-mt-24 rounded-2xl border bg-card p-5 shadow-sm sm:p-7">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <span className="grid size-9 shrink-0 place-items-center rounded-full bg-secondary text-primary">
+              <Handshake className="size-5" aria-hidden />
+            </span>
+            <div>
+              <p className="text-sm font-bold uppercase tracking-widest text-muted-foreground">2 · Cover</p>
+              <h2 className="text-2xl font-semibold">Make room for the rest.</h2>
+              <p className="text-base text-muted-foreground">
+                Keep it small: who rests, what needs attention, and whether someone covers or the work waits.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowCoverageForm((visible) => !visible)}
+            className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <Plus className="size-4" aria-hidden />
+            Add coverage
+          </button>
+        </div>
+
+        {showCoverageForm && (
+          <form onSubmit={addCoverage} className="mt-5 space-y-4 rounded-2xl border bg-background/60 p-4 sm:p-5">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="block space-y-2">
+                <span className="font-semibold">Who is resting?</span>
+                <input
+                  value={restingPerson}
+                  onChange={(event) => setRestingPerson(event.target.value)}
+                  maxLength={40}
+                  className="w-full rounded-xl border bg-background px-4 py-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
+              </label>
+
+              <label className="block space-y-2">
+                <span className="font-semibold">Day</span>
+                <input
+                  type="date"
+                  value={date}
+                  onChange={(event) => setDate(event.target.value)}
+                  className="w-full rounded-xl border bg-background px-4 py-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
+              </label>
+            </div>
+
+            <label className="block space-y-2">
+              <span className="font-semibold">What needs attention while they rest?</span>
+              <input
+                value={work}
+                onChange={(event) => setWork(event.target.value)}
+                maxLength={120}
+                placeholder="Community inbox, meeting, public update…"
+                className="w-full rounded-xl border bg-background px-4 py-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+            </label>
+
+            <div className="grid gap-2 sm:grid-cols-2">
+              <button
+                type="button"
+                aria-pressed={coverageAction === 'cover'}
+                onClick={() => setCoverageAction('cover')}
+                className={cn(
+                  'rounded-xl border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                  coverageAction === 'cover' ? 'border-primary bg-secondary' : 'hover:bg-secondary/60',
+                )}
+              >
+                <span className="block font-semibold">Someone can cover</span>
+                <span className="mt-1 block text-sm text-muted-foreground">The handoff still needs to be accepted.</span>
+              </button>
+              <button
+                type="button"
+                aria-pressed={coverageAction === 'pause'}
+                onClick={() => setCoverageAction('pause')}
+                className={cn(
+                  'rounded-xl border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                  coverageAction === 'pause' ? 'border-primary bg-secondary' : 'hover:bg-secondary/60',
+                )}
+              >
+                <span className="block font-semibold">Pause this work</span>
+                <span className="mt-1 block text-sm text-muted-foreground">Nobody has capacity, so it waits.</span>
+              </button>
+            </div>
+
+            {coverageAction === 'cover' && (
+              <label className="block space-y-2">
+                <span className="font-semibold">Who can cover?</span>
+                <input
+                  value={coveringPerson}
+                  onChange={(event) => setCoveringPerson(event.target.value)}
+                  maxLength={40}
+                  placeholder="Birch"
+                  className="w-full rounded-xl border bg-background px-4 py-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
+              </label>
+            )}
+
+            <label className="block space-y-2">
+              <span className="font-semibold">One handoff note <span className="font-normal text-muted-foreground">(optional)</span></span>
+              <input
+                value={handoffNote}
+                onChange={(event) => setHandoffNote(event.target.value)}
+                maxLength={240}
+                placeholder="Urgent replies only; everything else can wait."
+                className="w-full rounded-xl border bg-background px-4 py-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+            </label>
+
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="submit"
+                className="rounded-full bg-primary px-5 py-2.5 font-semibold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {coverageAction === 'pause' ? 'Pause the work' : 'Request coverage'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowCoverageForm(false)}
+                className="rounded-full px-4 py-2.5 font-semibold text-muted-foreground hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        )}
+
+        <div className="mt-5 space-y-3">
+          {state.coverage.length === 0 ? (
+            <div className="rounded-xl border border-dashed px-5 py-8 text-center">
+              <CircleDashed className="mx-auto size-6 text-muted-foreground" aria-hidden />
+              <p className="mt-2 font-semibold">No coverage planned yet.</p>
+              <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
+                Start with one real rest window. You do not need to build a full schedule.
+              </p>
+            </div>
+          ) : (
+            state.coverage.map((item) => (
+              <CoverageRow
+                key={item.id}
+                item={item}
+                onAccept={() => markCovered(item.id)}
+                onRemove={() => removeCoverage(item.id)}
+              />
+            ))
+          )}
+        </div>
+      </section>
+
+      <section className="rounded-2xl border bg-card p-5 shadow-sm sm:p-7">
+        <div className="flex items-start gap-3">
+          <span className="grid size-9 shrink-0 place-items-center rounded-full bg-secondary text-primary">
+            <UsersRound className="size-5" aria-hidden />
+          </span>
+          <div>
+            <p className="text-sm font-bold uppercase tracking-widest text-muted-foreground">3 · Reflect</p>
+            <h2 className="text-2xl font-semibold">Did our rest plan hold?</h2>
+            <p className="text-base text-muted-foreground">
+              One shared answer for the organization. No individual wellness score.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-5 grid grid-cols-3 gap-2">
+          {([
+            ['yes', 'Yes'],
+            ['partly', 'Partly'],
+            ['no', 'No'],
+          ] as const).map(([answer, label]) => (
+            <button
+              key={answer}
+              type="button"
+              aria-pressed={state.pulse?.answer === answer}
+              onClick={() => recordPulse(answer)}
+              className={cn(
+                'rounded-xl border px-3 py-4 font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                state.pulse?.answer === answer ? 'border-primary bg-secondary text-primary' : 'hover:bg-secondary/60',
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {state.pulse && (
+          <p className="mt-3 text-sm text-muted-foreground">
+            Last organization check-in: {new Date(state.pulse.recordedAt).toLocaleString()}
+          </p>
+        )}
+      </section>
+
+      {state.agreement.revision === 0 && state.coverage.length === 0 && (
+        <button
+          type="button"
+          onClick={loadDemo}
+          className="text-base font-semibold text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          Load a fictional Cedar / Birch example
+        </button>
+      )}
+
+      <section className="flex flex-wrap items-center justify-between gap-3 border-t pt-5">
+        <Link
+          to="/"
+          className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 font-semibold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          Back to my rest
+        </Link>
+        <button
+          type="button"
+          onClick={onLeave}
+          className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-muted-foreground hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <LogOut className="size-4" aria-hidden />
+          Leave organization on this device
+        </button>
+      </section>
+
+      <p className="text-sm leading-relaxed text-muted-foreground">
+        Organization data is separated by organization ID in this browser. This branch does not yet synchronize agreements,
+        coverage, or reflections between devices, so it should be treated as a local-first prototype rather than server-enforced authorization.
+      </p>
+    </div>
+  );
+}
+
+function AgreementPromise({
+  checked,
+  onChange,
+  title,
+  detail,
+}: {
+  checked: boolean;
+  onChange: () => void;
+  title: string;
+  detail: string;
 }) {
   return (
     <button
       type="button"
-      aria-current={active ? 'step' : undefined}
-      onClick={onClick}
+      role="checkbox"
+      aria-checked={checked}
+      onClick={onChange}
       className={cn(
-        'flex min-h-16 items-center justify-center gap-2 border-r px-2 text-base font-semibold transition-colors last:border-r-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
-        active ? 'bg-secondary text-primary' : 'hover:bg-secondary/60',
+        'flex w-full items-start gap-3 rounded-xl border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        checked && 'border-primary/40 bg-secondary/60',
       )}
     >
-      <span className={cn(
-        'grid size-7 place-items-center rounded-full border text-sm',
-        active && 'border-primary bg-primary text-primary-foreground',
-      )}>
-        {number}
+      <span
+        className={cn(
+          'mt-0.5 grid size-6 shrink-0 place-items-center rounded-md border',
+          checked && 'border-primary bg-primary text-primary-foreground',
+        )}
+        aria-hidden
+      >
+        {checked && <Check className="size-4" strokeWidth={3} />}
       </span>
-      {label}
+      <span>
+        <span className="block font-semibold">{title}</span>
+        <span className="mt-1 block text-sm leading-relaxed text-muted-foreground">{detail}</span>
+      </span>
     </button>
   );
 }
 
-function HandoverField({
-  label,
-  value,
-  onChange,
-  placeholder,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  placeholder: string;
-}) {
-  return (
-    <label className="block space-y-1.5">
-      <span className="text-base font-semibold">{label}</span>
-      <input
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        maxLength={240}
-        placeholder={placeholder}
-        className="w-full rounded-xl border bg-background px-4 py-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      />
-    </label>
-  );
-}
-
-function CoverageCard({
+function CoverageRow({
   item,
-  onStatus,
+  onAccept,
   onRemove,
 }: {
   item: CoverageItem;
-  onStatus: (status: CoverageStatus) => void;
+  onAccept: () => void;
   onRemove: () => void;
 }) {
-  const StatusIcon = item.status === 'accepted'
-    ? Check
+  const status = item.status === 'covered'
+    ? { label: 'Covered', icon: CheckCircle2, classes: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300' }
     : item.status === 'paused'
-      ? PauseCircle
-      : CircleDashed;
+      ? { label: 'Paused', icon: PauseCircle, classes: 'bg-amber-500/15 text-amber-800 dark:text-amber-300' }
+      : { label: 'Waiting', icon: CircleDashed, classes: 'bg-secondary text-secondary-foreground' };
+  const StatusIcon = status.icon;
 
   return (
-    <article className="rounded-2xl border bg-card p-5 shadow-sm">
+    <article className="rounded-xl border p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
-          <p className="text-sm font-bold uppercase tracking-widest text-muted-foreground">{formatWindow(item)}</p>
-          <h4 className="text-2xl font-semibold">{item.responsibility}</h4>
-          <p className="text-base text-muted-foreground">
-            <strong className="text-foreground">{item.restingAlias}</strong> rests
-            {item.coveringAlias
-              ? <> · <strong className="text-foreground">{item.coveringAlias}</strong> covers</>
-              : <> · nonessential work is paused</>}
+          <p className="text-sm font-bold uppercase tracking-widest text-muted-foreground">
+            {new Date(`${item.date}T12:00:00`).toLocaleDateString([], {
+              weekday: 'short',
+              month: 'short',
+              day: 'numeric',
+            })}
           </p>
+          <h3 className="text-xl font-semibold">{item.work}</h3>
+          <p className="text-base text-muted-foreground">
+            <strong className="text-foreground">{item.restingPerson}</strong> rests
+            {item.coveringPerson
+              ? <> · <strong className="text-foreground">{item.coveringPerson}</strong> covers</>
+              : <> · this work waits</>}
+          </p>
+          {item.note && <p className="text-sm text-muted-foreground">{item.note}</p>}
         </div>
-        <span className={cn(
-          'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-bold',
-          item.status === 'accepted' && 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
-          item.status === 'paused' && 'bg-amber-500/15 text-amber-800 dark:text-amber-300',
-          item.status === 'proposed' && 'bg-secondary text-secondary-foreground',
-          item.status === 'needs-change' && 'bg-rose-500/15 text-rose-700 dark:text-rose-300',
-        )}>
+
+        <span className={cn('inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-bold', status.classes)}>
           <StatusIcon className="size-4" aria-hidden />
-          {STATUS_LABELS[item.status]}
+          {status.label}
         </span>
       </div>
 
-      {(item.handover.currentStatus || item.handover.nextAction || item.handover.limit || item.handover.reference) && (
-        <details className="mt-4 rounded-xl bg-secondary/50 p-4">
-          <summary className="cursor-pointer font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-            Short handoff
-          </summary>
-          <dl className="mt-3 grid gap-3 text-base">
-            {item.handover.currentStatus && <HandoverRow term="Current status" value={item.handover.currentStatus} />}
-            {item.handover.nextAction && <HandoverRow term="Next action" value={item.handover.nextAction} />}
-            {item.handover.limit && <HandoverRow term="Limit" value={item.handover.limit} />}
-            {item.handover.reference && <HandoverRow term="Reference" value={item.handover.reference} />}
-          </dl>
-        </details>
-      )}
-
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        {item.status !== 'paused' && item.coveringAlias && (
-          <>
-            {item.status !== 'accepted' && (
-              <button
-                type="button"
-                onClick={() => onStatus('accepted')}
-                className="rounded-full bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                Accept coverage
-              </button>
-            )}
-            {item.status !== 'needs-change' && (
-              <button
-                type="button"
-                onClick={() => onStatus('needs-change')}
-                className="rounded-full border px-4 py-2 text-sm font-bold hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                Needs change
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => onStatus('paused')}
-              className="rounded-full border px-4 py-2 text-sm font-bold hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              Pause work
-            </button>
-          </>
+        {item.status === 'waiting' && (
+          <button
+            type="button"
+            onClick={onAccept}
+            className="rounded-full bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            Mark accepted
+          </button>
         )}
         <button
           type="button"
@@ -770,14 +1061,5 @@ function CoverageCard({
         </button>
       </div>
     </article>
-  );
-}
-
-function HandoverRow({ term, value }: { term: string; value: string }) {
-  return (
-    <div>
-      <dt className="font-semibold">{term}</dt>
-      <dd className="mt-0.5 text-muted-foreground">{value}</dd>
-    </div>
   );
 }
