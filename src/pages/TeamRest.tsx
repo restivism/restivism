@@ -439,13 +439,12 @@ function OrganizationWorkspace({
   const [coveringPerson, setCoveringPerson] = useState('');
   const [date, setDate] = useState(localDateValue);
   const [handoffNote, setHandoffNote] = useState('');
-  const [showCoverageForm, setShowCoverageForm] = useState(false);
+  const [showCoverageForm, setShowCoverageForm] = useState(() => requestedFocus === 'coverage');
   const [message, setMessage] = useState('');
   const [showInvite, setShowInvite] = useState(false);
 
   useEffect(() => {
     if (requestedFocus !== 'coverage') return;
-    setShowCoverageForm(true);
     const id = window.setTimeout(() => {
       coverageRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 100);
