@@ -19,6 +19,8 @@ import { Link, useSearchParams } from 'react-router-dom';
 
 import { AppShell } from '@/components/rest/AppShell';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
+import { useOrganizationSync } from '@/hooks/useOrganizationSync';
+import { useRest } from '@/hooks/useRest';
 import {
   createOrganizationInvite,
   DEFAULT_ORGANIZATION_DIRECTORY,
@@ -181,6 +183,10 @@ function OrganizationGate({
         alias: person,
         role: 'leader',
         joinedAt: Date.now(),
+        syncKey: result.organization.syncKey,
+        leaderPubkey: result.organization.leaderPubkey,
+        leaderSecretKey: result.organization.leaderSecretKey,
+        memberSecretKey: result.organization.memberSecretKey,
         inviteCode: result.inviteCode,
       });
     } catch (error) {
@@ -214,6 +220,9 @@ function OrganizationGate({
         alias: person,
         role: 'member',
         joinedAt: Date.now(),
+        syncKey: organization.syncKey,
+        leaderPubkey: organization.leaderPubkey,
+        memberSecretKey: organization.memberSecretKey,
       });
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not join that organization.');
@@ -442,6 +451,11 @@ function OrganizationWorkspace({
     storageKey,
     DEFAULT_ORGANIZATION_REST_STATE,
   );
+  const orgSync = useOrganizationSync(membership);
+  const { state: personalRest } = useRest();
+  const effectiveAgreement = membership.role === 'leader'
+    ? state.agreement
+    : orgSync.covenant ?? state.agreement;
 
   const coverageRef = useRef<HTMLElement>(null);
   const [editingAgreement, setEditingAgreement] = useState(
