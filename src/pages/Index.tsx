@@ -4,6 +4,7 @@ import { useRef } from 'react';
 import { AppShell } from '@/components/rest/AppShell';
 import { BatteryHero } from '@/components/rest/BatteryHero';
 import { RechargePlan } from '@/components/rest/RechargePlan';
+import { RestRecord } from '@/components/rest/RestRecord';
 import { useNow } from '@/hooks/useNow';
 import { useRest } from '@/hooks/useRest';
 import { recentCheckin } from '@/lib/rest';
@@ -34,8 +35,9 @@ const Index = () => {
     <AppShell>
       <BatteryHero now={now} onCheckIn={revealPlan} />
 
-      <div ref={planRef} className="relative mx-auto -mt-10 max-w-3xl scroll-mt-24 px-4 sm:px-6">
+      <div ref={planRef} className="relative mx-auto -mt-10 max-w-3xl scroll-mt-24 space-y-6 px-4 sm:px-6">
         <RechargePlan checkin={current} />
+        <RestRecord state={state} now={now} />
       </div>
     </AppShell>
   );
