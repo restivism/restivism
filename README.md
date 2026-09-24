@@ -70,14 +70,17 @@ invite + passcode are required to join it again.
 
 ### Current prototype limitation
 
-The invite + passcode can be used to join the same organization identity on another
-device, but this branch does **not yet synchronize organization data between
-devices**. Covenants, anonymous alignment responses, coverage, and reflections are
-currently local-first browser data, not server-enforced authorization. The
-leader/member permissions and anonymous aggregate are therefore the intended UX and
-data model, not yet a complete cross-device authorization system. Free-text feedback
-can still reveal identity through writing style or self-disclosed details, so the UI
-warns members not to include identifying information.
+New organizations now include encrypted shared-sync credentials inside the
+passcode-protected invite. The app uses NIP-78 application data on the configured
+Nostr relays to synchronize the leader-published covenant, anonymous covenant
+alignment/comments, and anonymous weekly battery summaries between browser origins
+and devices. The relay sees ciphertext and an opaque random organization identifier,
+not the plaintext organization content.
+
+Coverage/rota items and the shared reflect answer are still local-first in this
+iteration. Free-text feedback can still reveal identity through writing style or
+self-disclosed details, so the UI warns members not to include identifying
+information.
 
 That distinction is intentional for this iteration: the organization UX and data
 isolation model can be tested without publishing sensitive operational information
@@ -104,6 +107,11 @@ to Nostr or inventing a weak shared-key sync scheme.
 - Anonymous-to-the-UI member alignment slider with emoji feedback
 - Optional anonymous free-text covenant feedback, shown to leaders without the member's name, rating, or timestamp
 - Minimum 3-response threshold before leaders see covenant alignment results
+- Encrypted cross-browser covenant synchronization using NIP-78
+- One-time member privacy choice for automatic anonymous weekly battery sharing
+- Automatic weekly contribution refresh after opted-in battery check-ins
+- Leadership weekly restfulness metric after 3 anonymous contributors
+- Restivism battery glyphs for the organization average and 1–5 distribution
 - Simple coverage request with **Waiting / Covered / Paused**
 - Explicit acceptance before coverage counts
 - Pause-work path when nobody has capacity
@@ -131,8 +139,9 @@ Run `npm run test` before merging.
 ```
 src/
 ├── lib/rest.ts                  # Personal recharge plans and state
-├── lib/organization.ts          # Passcode-protected organization invites
+├── lib/organization.ts          # Passcode-protected org invites + sync credentials
 ├── lib/teamRest.ts              # Simplified org agreement, coverage, reflection
+├── hooks/useOrganizationSync.ts # Encrypted NIP-78 covenant/alignment/battery sync
 ├── components/RestProvider.tsx
 ├── components/rest/
 └── pages/
@@ -146,3 +155,27 @@ src/
 The build is a static site. Pushes to `main` deploy to GitHub Pages
 (`.github/workflows/deploy.yml`). It is also published to Nostr as the named
 nsite `restivism`.
+
+## Shared organization sync
+
+For organizations created on the shared-sync branch, the leader's passcode-encrypted
+invite contains the organization symmetric sync key and the leader public signing
+key. The leader private signing key stays only on the leader device.
+
+The leader covenant is published as encrypted NIP-78 kind `30078` app data and is
+accepted only from the trusted leader pubkey in the invite. Anonymous member
+alignment uses NIP-78 kind `78`; weekly battery summaries use addressable kind
+`30078`. Full schema details and security limitations are documented in
+`NIP.md`.
+
+The weekly leadership metric is intentionally aggregate-only. When joining an
+organization, members make a one-time privacy choice: automatically contribute their
+weekly battery average anonymously, or keep battery data private. Members can change
+that choice later. If automatic sharing is enabled, new battery check-ins refresh the
+member's single weekly contribution without another share action. Each participant
+counts once, regardless of how often they checked in, and the organization result
+does not appear until at least three anonymous contributors exist.
+
+The leadership view uses the same Restivism battery glyphs for the weekly
+organization average and for the 1–5 distribution. It never displays member aliases
+or individual battery histories.
