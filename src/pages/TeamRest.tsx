@@ -59,6 +59,21 @@ function sameName(a: string, b: string) {
   return a.trim().toLocaleLowerCase() === b.trim().toLocaleLowerCase();
 }
 
+function weekStartTimestamp(now = Date.now()) {
+  const date = new Date(now);
+  const daysSinceMonday = (date.getDay() + 6) % 7;
+  date.setHours(0, 0, 0, 0);
+  date.setDate(date.getDate() - daysSinceMonday);
+  return date.getTime();
+}
+
+function weekKey(now = Date.now()) {
+  const date = new Date(weekStartTimestamp(now));
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
 export default function TeamRest() {
   useSeoMeta({
     title: 'Organization rest | Restivism',
@@ -456,6 +471,13 @@ function OrganizationWorkspace({
   const effectiveAgreement = membership.role === 'leader'
     ? state.agreement
     : orgSync.covenant ?? state.agreement;
+  const currentWeekKey = weekKey();
+  const currentWeekStart = weekStartTimestamp();
+  const personalWeekCheckins = personalRest.checkins.filter((checkin) => checkin.at >= currentWeekStart);
+  const personalWeekAverage = personalWeekCheckins.length > 0
+    ? personalWeekCheckins.reduce((sum, checkin) => sum + checkin.level, 0) / personalWeekCheckins.length
+    : undefined;
+  const organizationWeek = orgSync.weeklyBattery.filter((item) => item.weekKey === currentWeekKey);
 
   const coverageRef = useRef<HTMLElement>(null);
   const [editingAgreement, setEditingAgreement] = useState(
@@ -592,6 +614,24 @@ function OrganizationWorkspace({
       setMessage('Your covenant alignment was shared anonymously with the organization.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not share covenant alignment.');
+    }
+  };
+
+  const shareWeeklyRestfulness = async () => {
+    if (personalWeekAverage === undefined || personalWeekCheckins.length === 0) {
+      setMessage('Check your battery at least once this week before sharing a weekly restfulness summary.');
+      return;
+    }
+
+    try {
+      await orgSync.publishWeeklyBattery(
+        currentWeekKey,
+        personalWeekAverage,
+        personalWeekCheckins.length,
+      );
+      setMessage('Your weekly battery average was shared anonymously with the organization.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not share weekly restfulness.');
     }
   };
 
@@ -832,6 +872,15 @@ function OrganizationWorkspace({
         )}
       </section>
 
+      <WeeklyRestfulnessCard
+        role={membership.role}
+        canSync={orgSync.canSync}
+        personalAverage={personalWeekAverage}
+        personalSamples={personalWeekCheckins.length}
+        submissions={organizationWeek}
+        onShare={shareWeeklyRestfulness}
+      />
+
       <section ref={coverageRef} className="scroll-mt-24 rounded-2xl border bg-card p-5 shadow-sm sm:p-7">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-start gap-3">
@@ -1057,6 +1106,112 @@ function OrganizationWorkspace({
         coverage, or reflections between devices, so it should be treated as a local-first prototype rather than server-enforced authorization.
       </p>
     </div>
+  );
+}
+
+function WeeklyRestfulnessCard({
+  role,
+  canSync,
+  personalAverage,
+  personalSamples,
+  submissions,
+  onShare,
+}: {
+  role: 'leader' | 'member';
+  canSync: boolean;
+  personalAverage?: number;
+  personalSamples: number;
+  submissions: Array<{ average: number; samples: number }>;
+  onShare: () => void;
+}) {
+  const privacyThreshold = 3;
+  const organizationAverage = submissions.length > 0
+    ? submissions.reduce((sum, item) => sum + item.average, 0) / submissions.length
+    : undefined;
+
+  return (
+    <section className="rounded-2xl border bg-card p-5 shadow-sm sm:p-7">
+      <div className="flex items-start gap-3">
+        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-secondary text-primary">
+          <UsersRound className="size-5" aria-hidden />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Weekly pulse</p>
+          <h2 className="text-2xl font-semibold">Organization restfulness</h2>
+          <p className="text-base text-muted-foreground">
+            A weekly 1–5 organization signal built from anonymous member battery averages.
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-5 rounded-xl bg-secondary/50 p-4">
+        <p className="font-semibold">Your week</p>
+        {personalAverage === undefined ? (
+          <p className="mt-1 text-sm text-muted-foreground">
+            No battery check-ins yet this week.
+          </p>
+        ) : (
+          <p className="mt-1 text-sm text-muted-foreground">
+            Your private average is <strong className="text-foreground">{personalAverage.toFixed(1)} / 5</strong>
+            {' '}from {personalSamples} check-in{personalSamples === 1 ? '' : 's'}.
+          </p>
+        )}
+        <button
+          type="button"
+          disabled={!canSync || personalAverage === undefined}
+          onClick={onShare}
+          className="mt-3 rounded-full border px-4 py-2 text-sm font-bold transition-colors hover:bg-background disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          Share/update anonymously
+        </button>
+      </div>
+
+      {role === 'leader' && (
+        <div className="mt-5 border-t pt-5">
+          <p className="font-semibold">Leadership dashboard · This week</p>
+          {submissions.length < privacyThreshold || organizationAverage === undefined ? (
+            <p className="mt-1 text-sm text-muted-foreground">
+              {submissions.length} anonymous contributor{submissions.length === 1 ? '' : 's'} so far.
+              {' '}The organization metric appears after at least {privacyThreshold} contributors.
+            </p>
+          ) : (
+            <div className="mt-3">
+              <div className="flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <p className="font-display text-4xl font-semibold">{organizationAverage.toFixed(1)} / 5</p>
+                  <p className="text-sm text-muted-foreground">
+                    Weekly restfulness · {submissions.length} anonymous contributors
+                  </p>
+                </div>
+                <span className="text-4xl" aria-hidden>
+                  {organizationAverage < 1.5 ? '🪫' : organizationAverage < 2.5 ? '😟' : organizationAverage < 3.5 ? '🤔' : organizationAverage < 4.5 ? '🙂' : '🔋'}
+                </span>
+              </div>
+              <div className="mt-4 grid grid-cols-5 gap-2" aria-label="Anonymous weekly battery distribution">
+                {[1, 2, 3, 4, 5].map((level) => {
+                  const count = submissions.filter((item) => Math.round(item.average) === level).length;
+                  return (
+                    <div key={level} className="rounded-lg bg-secondary/60 p-2 text-center">
+                      <p className="font-bold">{level}</p>
+                      <p className="text-xs text-muted-foreground">{count}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
+            Leaders never see which member submitted a score. Each contributor counts once through their current weekly average.
+          </p>
+        </div>
+      )}
+
+      {!canSync && (
+        <p className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
+          This organization was created before shared sync was added. Create a new organization with a new invite to use cross-device covenant and weekly metrics.
+        </p>
+      )}
+    </section>
   );
 }
 
