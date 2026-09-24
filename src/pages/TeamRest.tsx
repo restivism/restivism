@@ -319,7 +319,13 @@ function OrganizationGate({
           </button>
         </div>
 
-        {message && (
+        {!orgSync.canSync && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
+          This organization uses the older local-only invite format. To test cross-browser sharing, create a new organization on this branch and have members join using its new invite.
+        </div>
+      )}
+
+      {message && (
           <p className="mt-4 rounded-xl border border-primary/20 bg-secondary/50 px-4 py-3 text-base" role="status">
             {message}
           </p>
@@ -441,8 +447,8 @@ function OrganizationGate({
       </section>
 
       <p className="px-2 text-sm leading-relaxed text-muted-foreground">
-        Prototype note: the invite + passcode controls organization membership, and each organization gets a separate local data space.
-        Ongoing cross-device synchronization is not enabled in this branch yet.
+        New organizations include encrypted shared-sync credentials inside the passcode-protected invite.
+        Covenant, anonymous alignment, and weekly restfulness can then move between browsers without exposing their plaintext to relays.
       </p>
     </div>
   );
@@ -750,7 +756,14 @@ function OrganizationWorkspace({
           </div>
         </div>
 
-        {membership.role === 'leader' && editingAgreement ? (
+        {membership.role === 'member' && orgSync.canSync && orgSync.covenantStatus === 'pending' ? (
+          <div className="mt-5 rounded-xl border border-dashed px-5 py-6">
+            <p className="font-semibold">Checking for the published covenant…</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Shared organization data is being fetched and decrypted.
+            </p>
+          </div>
+        ) : membership.role === 'leader' && editingAgreement ? (
           <div className="mt-5 space-y-4">
             <AgreementPromise
               checked={agreementDraft.protectedRest}
