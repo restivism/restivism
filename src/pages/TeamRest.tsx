@@ -432,7 +432,7 @@ function OrganizationWorkspace({
 
   const coverageRef = useRef<HTMLElement>(null);
   const [editingAgreement, setEditingAgreement] = useState(state.agreement.revision === 0);
-  const [agreementNote, setAgreementNote] = useState(state.agreement.note);
+  const [agreementDraft, setAgreementDraft] = useState(state.agreement);
   const [restingPerson, setRestingPerson] = useState(membership.alias);
   const [work, setWork] = useState('');
   const [coverageAction, setCoverageAction] = useState<'cover' | 'pause'>('cover');
@@ -559,8 +559,9 @@ function OrganizationWorkspace({
   };
 
   const loadDemo = () => {
-    setState(createDemoOrganizationRestState());
-    setAgreementDraft(createDemoOrganizationRestState().agreement);
+    const demo = createDemoOrganizationRestState();
+    setState(demo);
+    setAgreementDraft(demo.agreement);
     setEditingAgreement(false);
     setMessage('Loaded fictional Cedar / Birch demo data for this organization.');
   };
