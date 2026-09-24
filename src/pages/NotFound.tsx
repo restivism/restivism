@@ -1,5 +1,5 @@
 import { useSeoMeta } from "@unhead/react";
-import { useLocation } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { useEffect } from "react";
 
 const NotFound = () => {
@@ -18,13 +18,17 @@ const NotFound = () => {
   }, [location.pathname]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold mb-4 text-gray-900 dark:text-gray-100">404</h1>
-        <p className="text-xl text-gray-600 dark:text-gray-400 mb-4">Oops! Page not found</p>
-        <a href="/" className="text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 underline">
-          Return to Home
-        </a>
+    <div className="flex min-h-dvh items-center justify-center bg-background px-4">
+      <div className="max-w-md text-center">
+        <p className="font-display text-7xl font-semibold text-primary">404</p>
+        <h1 className="mt-4 text-3xl font-semibold">This path leads nowhere.</h1>
+        <p className="mt-2 text-lg text-muted-foreground">Which, honestly, is a fine place to rest for a moment.</p>
+        <Link
+          to="/"
+          className="mt-6 inline-flex h-11 items-center rounded-full bg-primary px-6 text-base font-semibold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        >
+          Back to today
+        </Link>
       </div>
     </div>
   );
