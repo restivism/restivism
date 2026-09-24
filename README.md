@@ -12,12 +12,14 @@ of depending on one person to push through.
 ### My rest
 
 1. **Check in.** Set your battery from 1 (running on fumes) to 5 (fully charged).
-   Or say it out loud: speak for up to 30 seconds and Restivism suggests a level
-   from how your voice sounds — loudness, tone (pitch movement), and emphasis —
-   and, where the browser can transcribe on the device, from mood words like
-   "quit" or "exhausted". You confirm the suggestion or tap the level that feels
-   true. If someone mentions suicide or self-harm, Restivism skips the reading
-   and points them to a helpline instead.
+   Or say it out loud: speak for up to 30 seconds. Once the user opts in to
+   word understanding, Restivism transcribes what they said and reads its
+   sentiment on the device, and suggests a level from that; a flat, quiet voice
+   can pull it lower, but tone never raises it. Without word understanding it
+   shows loudness, tone (pitch movement), and emphasis but does not guess a
+   level, because tone alone cannot tell tired from upset. The user always
+   confirms or taps the level that feels true. If someone mentions suicide or
+   self-harm, Restivism skips the reading and points them to a helpline instead.
 2. **Get a plan.** Restivism recommends play, sleep, or social time plus a few small
    acts of care.
 3. **Recharge.** Start a timed rest session.
@@ -88,12 +90,13 @@ to Nostr or inventing a weak shared-key sync scheme.
 ## Privacy
 
 - Personal rest state stays in browser `localStorage` under `restivism:state`.
-- Voice check-ins are analysed in the browser with the Web Audio API. Audio is
-  never recorded, stored, or sent. Words are only transcribed with the browser's
-  on-device speech recognition (`processLocally`, Chrome 139+, after a one-time
-  language download the user opts into); there is no cloud fallback, so other
-  browsers measure tone only. Transcripts are never saved. Only the level the
-  user confirms is saved.
+- Voice check-ins are analysed in the browser. Audio is held in memory for the
+  check-in only, never stored or sent. Word understanding uses Whisper tiny.en
+  and a DistilBERT sentiment model via transformers.js in a Web Worker; the
+  models (about 110 MB) are downloaded from Hugging Face once, when the user
+  opts in, and cached by the browser. The ONNX runtime is served from this app,
+  not a CDN. Transcripts are shown back to the user and never saved. Only the
+  level the user confirms is saved.
 - Organization rest records are namespaced by organization ID.
 - Organization agreement, coverage, and reflection data are not published to Nostr.
 - There is no analytics, streak system, leaderboard, or individual performance
@@ -104,7 +107,7 @@ to Nostr or inventing a weak shared-key sync scheme.
 ## Features
 
 - Battery check-in with level-matched recharge plans
-- Optional voice check-in measuring loudness, tone, emphasis, and mood words on the device
+- Optional voice check-in that understands what was said, on the device
 - Crisis support card when a voice check-in mentions suicide or self-harm
 - Timed play, sleep, and social rest sessions
 - Create or join an organization

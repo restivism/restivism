@@ -1,11 +1,9 @@
 import { getContext } from './chime';
-import type { WordReading } from './words';
 
 /**
- * Voice check-in: listen to some speech and turn how it sounds (and, where
- * the browser can transcribe on the device, what was said) into a battery
- * reading. Everything runs on the device with the Web Audio API. Audio is
- * never stored or sent anywhere.
+ * Voice check-in: measure how speech sounds with the Web Audio API. What was
+ * said is read separately (see `understand.ts`). Everything runs on the
+ * device; audio is kept in memory only for the check-in, never stored or sent.
  *
  * The measures are acoustic proxies for vocal energy, not a diagnosis:
  * - Loudness: average level of the voiced frames, in dBFS.
@@ -14,9 +12,9 @@ import type { WordReading } from './words';
  * - Emphasis: how often the voice punches above its own baseline, per second.
  * - Presence: how much of the recording was spent speaking.
  *
- * When mood words were heard (see `words.ts`), they count for half, except
- * that negative words set a ceiling: a loud, emphatic "I want to quit" is
- * distress, not charge, and saying so outranks how it sounded.
+ * Tone measures intensity, not charge: a loud, emphatic "I want to quit" is
+ * distress. So a level is only suggested from what was said, and tone can
+ * only pull it down (a flat, quiet voice), never up.
  */
 
 /** One analysis frame. `pitch` is undefined when the frame is not voiced. */
@@ -34,12 +32,12 @@ export interface VoiceReading {
   presence: number;
   /** Each measure mapped to 0–1. */
   scores: { loudness: number; tone: number; emphasis: number; presence: number };
-  /** What was said, when the browser could transcribe it. */
-  words?: WordReading;
-  /** 0–100. */
-  energy: number;
-  /** Suggested battery level, 1–5. */
-  level: number;
+  /** The four measures combined, 0–1. */
+  sound: number;
+  /** 0–100, only when we know what was said. */
+  energy?: number;
+  /** Suggested battery level, 1–5, only when we know what was said. */
+  level?: number;
 }
 
 export const FRAME_SECONDS = 0.05;
@@ -109,8 +107,11 @@ export function analyseFrame(samples: Float32Array, sampleRate: number): VoiceFr
   return { db, pitch: db > SILENCE_DB ? detectPitch(samples, sampleRate) : undefined };
 }
 
-/** Summarise a recording's frames, or undefined if too little was spoken. */
-export function summarise(frames: VoiceFrame[], words?: WordReading): VoiceReading | undefined {
+/**
+ * Summarise a recording's frames, or undefined if too little was spoken.
+ * `positivity` (0–1) is the sentiment of what was said, if known.
+ */
+export function summarise(frames: VoiceFrame[], positivity?: number): VoiceReading | undefined {
   const voiced = frames.filter((f): f is Required<VoiceFrame> => f.pitch !== undefined);
   const voicedSeconds = voiced.length * FRAME_SECONDS;
   if (voicedSeconds < MIN_VOICED_SECONDS) return undefined;
@@ -142,26 +143,27 @@ export function summarise(frames: VoiceFrame[], words?: WordReading): VoiceReadi
     presence: scale(presence, 0.2, 0.7),
   };
   const sound = 0.3 * scores.loudness + 0.3 * scores.tone + 0.25 * scores.emphasis + 0.15 * scores.presence;
-  const said = words?.score;
-  const energy = Math.round(100 * (said === undefined ? sound : said < 0.5 ? Math.min(sound, said) : (sound + said) / 2));
-  const level = Math.min(5, 1 + Math.floor(energy / 20));
+  const reading = { voicedSeconds, loudnessDb, pitchSpreadSemitones, emphasisPerSecond, presence, scores, sound };
+  if (positivity === undefined) return reading;
 
-  return { voicedSeconds, loudnessDb, pitchSpreadSemitones, emphasisPerSecond, presence, scores, words, energy, level };
+  const energy = Math.round(100 * clamp01(positivity - 0.4 * Math.max(0, 0.5 - sound)));
+  return { ...reading, energy, level: Math.min(5, 1 + Math.floor(energy / 20)) };
 }
 
 export interface Recording {
-  /** Resolves with the frames once recording stops. */
-  done: Promise<VoiceFrame[]>;
+  /** Resolves once recording stops, with the audio if it was asked for. */
+  done: Promise<{ frames: VoiceFrame[]; audio?: Blob }>;
   /** Stop early. */
   stop: () => void;
 }
 
 /**
  * Record from the microphone for `seconds`, calling `onFrame` as each frame
- * is analysed. Must be started from a user gesture. Rejects if the
- * microphone is unavailable or permission is denied.
+ * is analysed, and keeping the audio in memory when `keepAudio` is set. Must
+ * be started from a user gesture. Rejects if the microphone is unavailable or
+ * permission is denied.
  */
-export async function recordVoice(onFrame: (frame: VoiceFrame) => void, seconds = RECORD_SECONDS): Promise<Recording> {
+export async function recordVoice(onFrame: (frame: VoiceFrame) => void, keepAudio = false, seconds = RECORD_SECONDS): Promise<Recording> {
   const ctx = getContext();
   if (!ctx || !navigator.mediaDevices?.getUserMedia) throw new Error('unsupported');
 
@@ -177,11 +179,20 @@ export async function recordVoice(onFrame: (frame: VoiceFrame) => void, seconds 
   source.connect(analyser);
   const buffer = new Float32Array(analyser.fftSize);
 
+  const recorder = keepAudio && typeof MediaRecorder !== 'undefined' ? new MediaRecorder(stream) : undefined;
+  const chunks: Blob[] = [];
+  recorder?.addEventListener('dataavailable', (e) => chunks.push(e.data));
+  recorder?.start();
+
   const frames: VoiceFrame[] = [];
-  let resolve!: (frames: VoiceFrame[]) => void;
-  const done = new Promise<VoiceFrame[]>((r) => {
+  let resolve!: (result: { frames: VoiceFrame[]; audio?: Blob }) => void;
+  const done = new Promise<{ frames: VoiceFrame[]; audio?: Blob }>((r) => {
     resolve = r;
   });
+  const finish = () => {
+    stream.getTracks().forEach((t) => t.stop());
+    resolve({ frames, audio: recorder && new Blob(chunks, { type: recorder.mimeType }) });
+  };
 
   let stopped = false;
   const stop = () => {
@@ -189,8 +200,13 @@ export async function recordVoice(onFrame: (frame: VoiceFrame) => void, seconds 
     stopped = true;
     window.clearInterval(timer);
     source.disconnect();
-    stream.getTracks().forEach((t) => t.stop());
-    resolve(frames);
+    // The recorder hands over its last chunk asynchronously on stop.
+    if (recorder) {
+      recorder.addEventListener('stop', finish);
+      recorder.stop();
+    } else {
+      finish();
+    }
   };
 
   const timer = window.setInterval(() => {
