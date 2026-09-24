@@ -50,6 +50,21 @@ export function RechargePlan({ checkin }: { checkin?: EnergyCheckin }) {
         <p className="max-w-2xl text-lg leading-relaxed text-muted-foreground">{plan.body}</p>
       </div>
 
+      {level <= 3 && (
+        <Link
+          to="/team?step=cover"
+          className="group flex items-center justify-between gap-4 rounded-2xl border border-primary/20 bg-secondary/60 p-4 transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <span>
+            <span className="block font-semibold">Need your team to make room for this rest?</span>
+            <span className="block text-base text-muted-foreground">
+              Plan coverage or pause nonessential work instead of pushing through.
+            </span>
+          </span>
+          <ArrowRight className="size-5 shrink-0 text-primary transition-transform group-hover:translate-x-0.5" aria-hidden />
+        </Link>
+      )}
+
       <ol className="space-y-3">
         <li>
           <RechargeStep
