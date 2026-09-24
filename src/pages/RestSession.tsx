@@ -1,16 +1,21 @@
 import { useSeoMeta } from '@unhead/react';
-import { ArrowLeft, Pause, Play, Square } from 'lucide-react';
+import { ArrowLeft, Pause, Play, Square, Volume2, VolumeX } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
-import { ProgressRing } from '@/components/rest/ProgressRing';
+import { ChargingBattery } from '@/components/rest/ChargingBattery';
 import { RechargeCheckin } from '@/components/rest/RechargeCheckin';
+import { RestScene } from '@/components/rest/RestScene';
 import { Button } from '@/components/ui/button';
 import { useRest } from '@/hooks/useRest';
+import { type Ambient, startAmbient } from '@/lib/ambient';
 import { playChime, primeAudio } from '@/lib/chime';
 import { getRecharge, type Recharge, type RestSession as Session } from '@/lib/rest';
 import { cn } from '@/lib/utils';
 import NotFound from './NotFound';
+
+/** `?demo` runs a minute every second, for showing the whole loop live. */
+const DEMO_SPEED = 60;
 
 type Stage = 'setup' | 'running' | 'done';
 
@@ -33,7 +38,10 @@ function SessionFlow({ recharge }: { recharge: Recharge }) {
   const [stage, setStage] = useState<Stage>('setup');
   const [minutes, setMinutes] = useState(initial);
   const [session, setSession] = useState<Session>();
-  const { completeSession } = useRest();
+  const [paused, setPaused] = useState(false);
+  const { state, completeSession, updateSettings } = useRest();
+  const muted = !state.settings.music;
+  const speed = params.has('demo') ? DEMO_SPEED : 1;
 
   useSeoMeta({ title: `${recharge.name} | Restivism` });
 
@@ -44,16 +52,25 @@ function SessionFlow({ recharge }: { recharge: Recharge }) {
   }, [completeSession, recharge.id]);
 
   const Icon = recharge.icon;
+  const SoundIcon = muted ? VolumeX : Volume2;
 
   return (
     <div className="dark relative isolate min-h-dvh overflow-hidden bg-background text-foreground">
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
         <div className={cn('absolute inset-0 bg-gradient-to-b opacity-60', recharge.gradient)} />
-        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />
+        <div
+          className={cn(
+            'absolute inset-0 transition-opacity duration-[2000ms]',
+            stage === 'running' ? 'opacity-100' : 'opacity-40',
+          )}
+        >
+          <RestScene recharge={recharge.id} paused={paused} />
+        </div>
+        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
       </div>
 
       <div className="mx-auto flex min-h-dvh max-w-xl flex-col px-4 py-6 sm:px-6">
-        <header className="flex items-center justify-between">
+        <header className="flex items-center justify-between gap-2">
           <Button asChild variant="ghost" className="rounded-full text-base">
             <Link to="/">
               <ArrowLeft className="size-5" aria-hidden />
@@ -63,6 +80,18 @@ function SessionFlow({ recharge }: { recharge: Recharge }) {
           <span className="flex items-center gap-2 text-base font-semibold text-muted-foreground">
             <Icon className="size-5" aria-hidden />
             {recharge.name}
+            {stage !== 'done' && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="ml-1 size-11 rounded-full"
+                onClick={() => updateSettings({ music: muted })}
+                aria-label={muted ? 'Turn soundscape on' : 'Turn soundscape off'}
+                title={muted ? 'Turn soundscape on' : 'Turn soundscape off'}
+              >
+                <SoundIcon className="size-5" aria-hidden />
+              </Button>
+            )}
           </span>
         </header>
 
@@ -112,7 +141,17 @@ function SessionFlow({ recharge }: { recharge: Recharge }) {
           </div>
         )}
 
-        {stage === 'running' && <Running recharge={recharge} minutes={minutes} onFinish={finish} />}
+        {stage === 'running' && (
+          <Running
+            recharge={recharge}
+            minutes={minutes}
+            speed={speed}
+            muted={muted}
+            paused={paused}
+            onPausedChange={setPaused}
+            onFinish={finish}
+          />
+        )}
 
         {stage === 'done' && session && (
           <div className="flex flex-1 flex-col justify-center gap-8 py-10 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-700">
@@ -166,13 +205,34 @@ function formatClock(ms: number): string {
   return h ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`;
 }
 
+/** Play the recharge's soundscape while mounted, fading with `muted`. */
+function useAmbient(recharge: Recharge, muted: boolean) {
+  const ambient = useRef<Ambient>(undefined);
+  const initiallyMuted = useRef(muted);
+
+  useEffect(() => {
+    const a = startAmbient(recharge.id, initiallyMuted.current);
+    ambient.current = a;
+    return () => a?.stop();
+  }, [recharge.id]);
+
+  useEffect(() => {
+    ambient.current?.setMuted(muted);
+  }, [muted]);
+}
+
 interface RunningProps {
   recharge: Recharge;
   minutes: number;
+  /** How many times faster than real time the session runs. */
+  speed: number;
+  muted: boolean;
+  paused: boolean;
+  onPausedChange: (paused: boolean) => void;
   onFinish: (minutes: number) => void;
 }
 
-function Running({ recharge, minutes, onFinish }: RunningProps) {
+function Running({ recharge, minutes, speed, muted, paused, onPausedChange, onFinish }: RunningProps) {
   const navigate = useNavigate();
   const totalMs = minutes * 60_000;
   // Wall-clock timing so the session stays accurate if the tab is backgrounded.
@@ -182,8 +242,9 @@ function Running({ recharge, minutes, onFinish }: RunningProps) {
   const { pausedAt } = timer;
 
   useWakeLock(pausedAt === null);
+  useAmbient(recharge, muted || paused);
 
-  const elapsed = Math.min(totalMs, now - timer.startedAt - timer.pausedMs - (pausedAt ? now - pausedAt : 0));
+  const elapsed = Math.min(totalMs, (now - timer.startedAt - timer.pausedMs - (pausedAt ? now - pausedAt : 0)) * speed);
   const remaining = totalMs - elapsed;
 
   useEffect(() => {
@@ -206,6 +267,7 @@ function Running({ recharge, minutes, onFinish }: RunningProps) {
         : { ...prev, pausedAt: t },
     );
     setNow(t);
+    onPausedChange(!paused);
   };
 
   const restedMinutes = Math.floor(elapsed / 60_000);
@@ -216,27 +278,29 @@ function Running({ recharge, minutes, onFinish }: RunningProps) {
     else navigate('/');
   };
 
-  const prompt = recharge.prompts[Math.floor(elapsed / 60_000) % recharge.prompts.length];
+  // A new prompt each minute, or every few seconds of a sped-up demo.
+  const promptEvery = speed > 1 ? 8_000 * speed : 60_000;
+  const prompt = recharge.prompts[Math.floor(elapsed / promptEvery) % recharge.prompts.length];
 
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-10 py-10">
-      <ProgressRing
+    <div className="flex flex-1 flex-col items-center justify-center gap-8 py-8 motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 motion-safe:duration-1000">
+      <ChargingBattery
+        recharge={recharge.id}
         value={elapsed / totalMs}
-        size={260}
-        stroke={8}
-        trackClassName="stroke-white/10"
-        barClassName="stroke-primary"
-        label="Time progress"
-      >
-        <div>
-          <p className="font-display text-6xl font-light tabular-nums" aria-live="off">{formatClock(remaining)}</p>
-          <p className="mt-1 text-base text-muted-foreground">{pausedAt ? 'Paused' : 'remaining'}</p>
-        </div>
-      </ProgressRing>
+        paused={!!pausedAt}
+        className="h-[min(44vh,340px)] aspect-[160/280]"
+      />
+
+      <div className="text-center">
+        <p className="font-display text-6xl font-light tabular-nums" aria-live="off">{formatClock(remaining)}</p>
+        <p className="mt-1 text-base text-muted-foreground">
+          {pausedAt ? 'Paused' : `${Math.floor((elapsed / totalMs) * 100)}% charged · breathe with the glow`}
+        </p>
+      </div>
 
       <p
         key={prompt}
-        className="min-h-20 max-w-md text-center font-display text-2xl leading-snug motion-safe:animate-in motion-safe:fade-in motion-safe:duration-1000"
+        className="min-h-16 max-w-md text-center font-display text-2xl leading-snug motion-safe:animate-in motion-safe:fade-in motion-safe:duration-1000"
         aria-live="polite"
       >
         {prompt}

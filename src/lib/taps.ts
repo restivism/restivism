@@ -65,7 +65,7 @@ function bugle(ctx: AudioContext, out: AudioNode, sources: AudioScheduledSourceN
 }
 
 /** A decaying burst of noise, used as a reverb impulse response. */
-function roomImpulse(ctx: AudioContext, seconds = 2.5): AudioBuffer {
+export function roomImpulse(ctx: AudioContext, seconds = 2.5): AudioBuffer {
   const length = Math.floor(ctx.sampleRate * seconds);
   const buffer = ctx.createBuffer(2, length, ctx.sampleRate);
   for (let ch = 0; ch < 2; ch++) {
