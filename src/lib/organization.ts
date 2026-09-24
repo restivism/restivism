@@ -195,6 +195,6 @@ export async function openOrganizationInvite(inviteCode: string, passcode: strin
     if (error instanceof Error && error.message.startsWith('Secure browser cryptography is unavailable.')) {
       throw error;
     }
-    throw new Error('That invite code and passcode do not match.');
+    throw new Error('That invite code and passcode do not match.', { cause: error });
   }
 }
