@@ -44,10 +44,14 @@ function bytesToBase64Url(bytes: Uint8Array): string {
   return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/u, '');
 }
 
-function base64UrlToBytes(value: string): Uint8Array {
+function base64UrlToBytes(value: string): Uint8Array<ArrayBuffer> {
   const padded = value.replaceAll('-', '+').replaceAll('_', '/') + '='.repeat((4 - value.length % 4) % 4);
   const binary = atob(padded);
-  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
 }
 
 function encodeEnvelope(envelope: InviteEnvelope): string {
@@ -73,7 +77,7 @@ function decodeEnvelope(inviteCode: string): InviteEnvelope {
   return envelope as InviteEnvelope;
 }
 
-async function deriveInviteKey(passcode: string, salt: Uint8Array): Promise<CryptoKey> {
+async function deriveInviteKey(passcode: string, salt: Uint8Array<ArrayBuffer>): Promise<CryptoKey> {
   const material = await crypto.subtle.importKey(
     'raw',
     encoder.encode(passcode),
