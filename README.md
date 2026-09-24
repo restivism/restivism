@@ -2,50 +2,66 @@
 
 **Rest is resistance.**
 
-Restivism is a rest companion for activists and organizers. People who do movement
-work tend to push until they burn out. Restivism asks one question, "How is your
-battery?", and gives you a plan to recharge before you run empty.
+Restivism is a rest companion for activists and organizers. It keeps the original
+personal loop — check your battery, get a recharge plan, rest, and check in again —
+and adds a small team layer so rest can be protected in practice rather than left
+as an individual intention.
 
 ## How it works
+
+### My rest
 
 1. **Check in.** Set your battery from 1 (running on fumes) to 5 (fully charged).
    The hero art and colors change to match.
 2. **Get a plan.** Each level has its own plan: one recharge to do first, two
-   alternatives if that one isn't possible right now, and three small care quests
-   to tick off for the day.
-3. **Recharge.** Start a timed session of one of three kinds:
+   alternatives if that one isn't possible right now, and three small care quests.
+3. **Recharge.** Start a timed play, sleep, or social session.
+4. **Check in again.** Report your battery after the session so you can see what
+   the rest did for you.
 
-   | Recharge        | What it is                                           | Lengths (min) |
-   | --------------- | ---------------------------------------------------- | ------------- |
-   | **Play time**   | Something purely for fun. It doesn't have to be useful. | 15, 30, 60    |
-   | **Sleep time**  | Lie down; a soft chime wakes you at the end.        | 20, 30, 90    |
-   | **Social time** | Time with someone you like, not talking about the work. | 15, 30, 60    |
+### Team rest
 
-   While the timer runs, gentle prompts rotate every minute. You can pause, or end
-   early and still get credit for the minutes you rested.
-4. **Check in again.** When the session ends, report your battery a second time so
-   you can see what the rest did for you.
+The optional `/team` flow is deliberately simple:
 
-The plans lean on rest harder the lower you are: an empty battery gets 90 minutes
-of sleep and a nudge to cancel something, while a full battery gets encouragement
-to protect it. If you check in at empty, the app plays Taps (you can mute it).
+1. **Agree.** Write a short team agreement about protected rest and what happens
+   when nobody has capacity. Movement, secular, and faith framings are available.
+2. **Cover.** Use aliases by default, propose a bounded handoff, and require the
+   receiving person to explicitly accept it. If nobody can cover nonessential work,
+   pause it instead of silently returning it to the person who is resting.
+3. **Reflect.** Record one shared team answer to “Did our coverage plan hold?” or
+   choose not to record an answer.
+
+Handoffs are optional and intentionally minimal: current status, next bounded
+action, agreed limit, and an essential reference the receiver already has access to.
 
 ## Privacy
 
-Restivism has no account, no server, and no analytics. Everything (check-ins,
-sessions, completed quests, and settings) is stored in your browser's
-`localStorage` under the `restivism:state` key and never leaves your device.
+Restivism has no analytics and the personal-rest state stays in browser
+`localStorage` under `restivism:state`.
+
+The team-rest layer is also local by default, stored separately under
+`restivism:team-rest`. Team agreements, aliases, coverage plans, handoffs, and
+the team pulse are **not published to Nostr**. Browser storage is not encrypted, so
+the UI recommends aliases and warns users not to store passwords, beneficiary
+identities, case histories, or precise sensitive locations.
+
 Clearing site data resets the app.
 
 ## Features
 
 - Battery check-in with level-matched artwork and a plan for each level
-- Session timer that uses wall-clock time, so it stays accurate when the tab is in
-  the background
-- Screen wake lock during sessions (where the browser supports it)
-- Chime and Taps synthesized with the Web Audio API, with no audio files
-- Custom session lengths via `/rest/:recharge?m=<minutes>` (up to 180)
-- Syncs state across open tabs
+- Session timer with wall-clock timing and screen wake lock where supported
+- Chime and Taps synthesized with Web Audio
+- Team agreement with revision tracking
+- Alias-first coverage planning
+- Explicit proposed → accepted coverage state
+- Overlap protection for accepted coverage assigned to the same alias
+- “Pause work” path when nobody has capacity
+- Optional minimal handoff notes
+- One shared team-level reflection, not individual mood or performance tracking
+- Fictional Cedar / Birch / Ash demo data for presentations
+- No streaks, points, badges, leaderboards, or individual wellness scoring
+- Syncs local state across open tabs
 - Respects `prefers-reduced-motion`; keyboard and screen-reader friendly
 - Installable as a web app via the manifest
 
@@ -65,25 +81,22 @@ Run `npm run test` before committing; it must pass.
 
 React 19, TypeScript, Vite, Tailwind CSS 4, shadcn/ui on Radix, React Router, and
 TanStack Query. The project is built on [MKStack](https://soapbox.pub/mkstack), so
-Nostr plumbing (Nostrify, login, relay config) is present, though the app does not
-currently publish or read anything from Nostr.
+Nostr plumbing (Nostrify, login, relay config) is present. The team-rest feature
+intentionally does not publish its sensitive operational data to Nostr.
 
 ### Layout
 
 ```
 src/
-├── lib/rest.ts              # Recharges, battery levels, per-level plans, state types
-├── lib/taps.ts, chime.ts    # Web Audio synthesis
-├── components/RestProvider.tsx  # localStorage-backed app state
-├── components/rest/         # Battery hero, plan, check-in, progress ring, shell
+├── lib/rest.ts                   # Personal recharge plans and state types
+├── lib/teamRest.ts               # Team agreement, coverage, pulse domain model
+├── components/RestProvider.tsx   # localStorage-backed personal state
+├── components/rest/              # Battery, plan, timer shell
 └── pages/
-    ├── Index.tsx            # Check-in and plan
-    └── RestSession.tsx      # /rest/:practiceId timer flow
+    ├── Index.tsx                 # Personal check-in and recharge plan
+    ├── RestSession.tsx           # /rest/:practiceId timer flow
+    └── TeamRest.tsx              # /team Agree → Cover → Reflect flow
 ```
-
-The copy for every plan, recharge, prompt, and care quest lives in
-`src/lib/rest.ts`. That is the place to edit if you want to change what the app
-says.
 
 ## Deployment
 
@@ -91,9 +104,4 @@ The build is a static site. Pushes to `main` deploy to GitHub Pages
 (`.github/workflows/deploy.yml`); `.gitlab-ci.yml` does the same for GitLab Pages.
 
 It is also published to Nostr as a named [nsite](https://nsyte.run), `restivism`,
-configured in `.nsite/config.json` and signed with a bunker:
-
-```sh
-npm run build
-nsyte deploy dist -d restivism -i --skip-secrets-scan
-```
+configured in `.nsite/config.json`.
