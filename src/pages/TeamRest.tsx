@@ -181,6 +181,7 @@ function OrganizationGate({
   const [alias, setAlias] = useState('');
   const [passcode, setPasscode] = useState('');
   const [inviteCode, setInviteCode] = useState('');
+  const [batterySharing, setBatterySharing] = useState<'auto' | 'private' | ''>('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
 
@@ -234,6 +235,10 @@ function OrganizationGate({
       setMessage('Paste the organization invite, enter the passcode, and choose your name or alias.');
       return;
     }
+    if (!batterySharing) {
+      setMessage('Choose whether your weekly battery should be shared anonymously with the organization.');
+      return;
+    }
 
     setBusy(true);
     setMessage('');
@@ -249,6 +254,7 @@ function OrganizationGate({
         syncKey: organization.syncKey,
         leaderPubkey: organization.leaderPubkey,
         memberSecretKey: organization.memberSecretKey,
+        autoShareWeeklyBattery: batterySharing === 'auto',
       });
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not join that organization.');
@@ -438,6 +444,49 @@ function OrganizationGate({
                 className="w-full rounded-xl border bg-background px-4 py-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
             </label>
+
+            <fieldset className="space-y-3">
+              <legend className="font-semibold">Weekly battery privacy</legend>
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                Choose once. You can change this later inside the organization.
+              </p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <label className={cn(
+                  'cursor-pointer rounded-xl border p-4 transition-colors',
+                  batterySharing === 'auto' ? 'border-primary bg-secondary' : 'hover:bg-secondary/60',
+                )}>
+                  <input
+                    type="radio"
+                    name="battery-sharing"
+                    value="auto"
+                    checked={batterySharing === 'auto'}
+                    onChange={() => setBatterySharing('auto')}
+                    className="sr-only"
+                  />
+                  <span className="block font-semibold">Share anonymously each week</span>
+                  <span className="mt-1 block text-sm leading-relaxed text-muted-foreground">
+                    Restivism automatically contributes your weekly average. Leaders never see your alias or individual history.
+                  </span>
+                </label>
+                <label className={cn(
+                  'cursor-pointer rounded-xl border p-4 transition-colors',
+                  batterySharing === 'private' ? 'border-primary bg-secondary' : 'hover:bg-secondary/60',
+                )}>
+                  <input
+                    type="radio"
+                    name="battery-sharing"
+                    value="private"
+                    checked={batterySharing === 'private'}
+                    onChange={() => setBatterySharing('private')}
+                    className="sr-only"
+                  />
+                  <span className="block font-semibold">Keep my battery private</span>
+                  <span className="mt-1 block text-sm leading-relaxed text-muted-foreground">
+                    Your personal battery stays only on this device and does not enter the organization metric.
+                  </span>
+                </label>
+              </div>
+            </fieldset>
 
             <button
               type="submit"
