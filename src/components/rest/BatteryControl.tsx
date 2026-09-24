@@ -62,7 +62,7 @@ export function BatteryControl({
             onClick={() => onChange(level)}
             onKeyDown={(e) => handleKey(e, level)}
             className={cn(
-              'flex flex-col items-center rounded-lg border sm:rounded-2xl font-semibold transition-all',
+              'relative flex flex-col items-center rounded-lg border sm:rounded-2xl font-semibold transition-all',
               'focus-visible:outline-none focus-visible:ring-4 motion-safe:active:scale-95',
               size === 'lg' ? 'gap-2 px-1 py-4 text-sm sm:gap-3 sm:py-6 sm:text-lg' : 'gap-2 px-1 py-3 text-sm',
               onDark
@@ -82,7 +82,17 @@ export function BatteryControl({
               checked && level <= 2 && 'motion-safe:animate-pulse',
             )}
           >
-            <BatteryGlyph level={level} size={size} />
+            {/* Tapping a battery charges it up, and a ring ripples out. */}
+            {checked && (
+              <span
+                className={cn(
+                  'pointer-events-none absolute inset-0 rounded-[inherit] border-2 opacity-0 motion-safe:animate-ripple',
+                  onDark ? 'border-white' : 'border-primary',
+                )}
+                aria-hidden
+              />
+            )}
+            <BatteryGlyph key={String(checked)} level={level} size={size} animate={checked} />
             {short}
           </button>
         );
@@ -99,8 +109,16 @@ const GLYPH_SIZES = {
   lg: 'w-full max-w-12 sm:max-w-[4.5rem]',
 };
 
+interface BatteryGlyphProps {
+  level?: number;
+  size?: 'sm' | 'md' | 'lg';
+  /** Fill the cells one after another, as if charging. */
+  animate?: boolean;
+  className?: string;
+}
+
 /** A read-only battery icon filled to `level` of 5. */
-export function BatteryGlyph({ level, size = 'sm', className }: { level?: number; size?: 'sm' | 'md' | 'lg'; className?: string }) {
+export function BatteryGlyph({ level, size = 'sm', animate = false, className }: BatteryGlyphProps) {
   return (
     <svg
       viewBox="0 0 50 24"
@@ -110,7 +128,16 @@ export function BatteryGlyph({ level, size = 'sm', className }: { level?: number
       <rect x="1.25" y="1.25" width="43.5" height="21.5" rx="2.5" fill="none" stroke="currentColor" strokeWidth="2.5" />
       <path d="M46.5 8h1a1.5 1.5 0 0 1 1.5 1.5v5a1.5 1.5 0 0 1-1.5 1.5h-1z" fill="currentColor" />
       {level !== undefined && [1, 2, 3, 4, 5].filter((i) => i <= level).map((i) => (
-        <rect key={i} x={4.5 + (i - 1) * 7.64} y="4.5" width="6.44" height="15" rx="0.5" className={LEVEL_FILL[level]} />
+        <rect
+          key={i}
+          x={4.5 + (i - 1) * 7.64}
+          y="4.5"
+          width="6.44"
+          height="15"
+          rx="0.5"
+          className={cn(LEVEL_FILL[level], animate && 'motion-safe:animate-pop')}
+          style={animate ? { animationDelay: `${i * 90}ms`, transformBox: 'fill-box', transformOrigin: 'center' } : undefined}
+        />
       ))}
     </svg>
   );
