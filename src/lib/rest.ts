@@ -143,6 +143,15 @@ export const LEVEL_COLOR: Record<number, string> = {
   5: 'bg-emerald-500',
 };
 
+/** `LEVEL_COLOR` for SVG shapes. */
+export const LEVEL_FILL: Record<number, string> = {
+  1: 'fill-rose-500',
+  2: 'fill-orange-500',
+  3: 'fill-amber-400',
+  4: 'fill-lime-500',
+  5: 'fill-emerald-500',
+};
+
 export const LEVEL_TEXT: Record<number, string> = {
   1: 'text-rose-600 dark:text-rose-400',
   2: 'text-orange-600 dark:text-orange-400',

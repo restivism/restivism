@@ -1,6 +1,6 @@
 import { type KeyboardEvent, useRef } from 'react';
 
-import { ENERGY_LEVELS, LEVEL_COLOR } from '@/lib/rest';
+import { ENERGY_LEVELS, LEVEL_FILL } from '@/lib/rest';
 import { cn } from '@/lib/utils';
 
 interface BatteryControlProps {
@@ -62,7 +62,7 @@ export function BatteryControl({
             onClick={() => onChange(level)}
             onKeyDown={(e) => handleKey(e, level)}
             className={cn(
-              'flex flex-col items-center rounded-2xl border font-semibold transition-all',
+              'flex flex-col items-center rounded-lg border sm:rounded-2xl font-semibold transition-all',
               'focus-visible:outline-none focus-visible:ring-4 motion-safe:active:scale-95',
               size === 'lg' ? 'gap-2 px-1 py-4 text-sm sm:gap-3 sm:py-6 sm:text-lg' : 'gap-2 px-1 py-3 text-sm',
               onDark
@@ -91,27 +91,27 @@ export function BatteryControl({
   );
 }
 
+// Widths only: the SVG keeps its own proportions, so corners, stroke, and
+// cells scale together instead of rounding off as the icon shrinks.
 const GLYPH_SIZES = {
-  sm: { body: 'h-5 w-9 rounded-[5px] border-2 p-0.5 gap-0.5', cell: 'rounded-[1px]', nub: 'ml-px h-2 w-0.5 rounded-r-sm' },
-  md: { body: 'h-7 w-12 rounded-md border-[2.5px] p-0.5 gap-0.5', cell: 'rounded-[2px]', nub: 'ml-px h-3 w-1 rounded-r-sm' },
-  lg: {
-    body: 'h-7 w-11 rounded-md border-[2.5px] p-0.5 gap-0.5 sm:h-11 sm:w-[4.5rem] sm:rounded-lg sm:border-[3px] sm:p-1 sm:gap-1',
-    cell: 'rounded-[2px] sm:rounded-[3px]',
-    nub: 'ml-px h-3 w-1 rounded-r-sm sm:h-4 sm:w-1.5',
-  },
+  sm: 'w-8',
+  md: 'w-12',
+  lg: 'w-full max-w-12 sm:max-w-[4.5rem]',
 };
 
 /** A read-only battery icon filled to `level` of 5. */
 export function BatteryGlyph({ level, size = 'sm', className }: { level?: number; size?: 'sm' | 'md' | 'lg'; className?: string }) {
-  const s = GLYPH_SIZES[size];
   return (
-    <span className={cn('inline-flex items-center', className)} aria-hidden>
-      <span className={cn('flex border-current', s.body)}>
-        {[1, 2, 3, 4, 5].map((i) => (
-          <span key={i} className={cn('flex-1', s.cell, level && i <= level ? LEVEL_COLOR[level] : 'bg-transparent')} />
-        ))}
-      </span>
-      <span className={cn('bg-current', s.nub)} />
-    </span>
+    <svg
+      viewBox="0 0 50 24"
+      className={cn('inline-block h-auto shrink-0 align-middle', GLYPH_SIZES[size], className)}
+      aria-hidden
+    >
+      <rect x="1.25" y="1.25" width="43.5" height="21.5" rx="2.5" fill="none" stroke="currentColor" strokeWidth="2.5" />
+      <path d="M46.5 8h1a1.5 1.5 0 0 1 1.5 1.5v5a1.5 1.5 0 0 1-1.5 1.5h-1z" fill="currentColor" />
+      {level !== undefined && [1, 2, 3, 4, 5].filter((i) => i <= level).map((i) => (
+        <rect key={i} x={4.5 + (i - 1) * 7.64} y="4.5" width="6.44" height="15" rx="0.5" className={LEVEL_FILL[level]} />
+      ))}
+    </svg>
   );
 }
