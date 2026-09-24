@@ -4,11 +4,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { ProgressRing } from '@/components/rest/ProgressRing';
-import { RechargeCheckin } from '@/components/rest/RechargeCheckin';
 import { Button } from '@/components/ui/button';
-import { useRest } from '@/hooks/useRest';
 import { playChime, primeAudio } from '@/lib/chime';
-import { getRecharge, type Recharge, type RestSession as Session } from '@/lib/rest';
+import { getRecharge, type Recharge } from '@/lib/rest';
 import { cn } from '@/lib/utils';
 import NotFound from './NotFound';
 
@@ -32,16 +30,14 @@ function SessionFlow({ recharge }: { recharge: Recharge }) {
 
   const [stage, setStage] = useState<Stage>('setup');
   const [minutes, setMinutes] = useState(initial);
-  const [session, setSession] = useState<Session>();
-  const { completeSession } = useRest();
 
   useSeoMeta({ title: `${recharge.name} | Restivism` });
 
-  const finish = useCallback((rested: number) => {
+  // Timers are ephemeral. No duration history, battery rating, or reward is saved.
+  const finish = useCallback(() => {
     playChime();
-    setSession(completeSession({ practice: recharge.id, minutes: rested }));
     setStage('done');
-  }, [completeSession, recharge.id]);
+  }, []);
 
   const Icon = recharge.icon;
 
@@ -57,7 +53,7 @@ function SessionFlow({ recharge }: { recharge: Recharge }) {
           <Button asChild variant="ghost" className="rounded-full text-base">
             <Link to="/">
               <ArrowLeft className="size-5" aria-hidden />
-              Your plan
+              Team workspace
             </Link>
           </Button>
           <span className="flex items-center gap-2 text-base font-semibold text-muted-foreground">
@@ -74,6 +70,7 @@ function SessionFlow({ recharge }: { recharge: Recharge }) {
               </span>
               <h1 className="text-5xl font-semibold tracking-tight">{recharge.name}</h1>
               <p className="mx-auto max-w-md text-lg leading-relaxed text-muted-foreground">{recharge.tip}</p>
+              <p className="text-base text-muted-foreground">Optional and untracked. Nothing about this timer is saved.</p>
             </div>
 
             <fieldset>
@@ -114,17 +111,16 @@ function SessionFlow({ recharge }: { recharge: Recharge }) {
 
         {stage === 'running' && <Running recharge={recharge} minutes={minutes} onFinish={finish} />}
 
-        {stage === 'done' && session && (
+        {stage === 'done' && (
           <div className="flex flex-1 flex-col justify-center gap-8 py-10 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-700">
             <div className="space-y-3 text-center">
               <h1 className="text-5xl font-semibold tracking-tight">Welcome back.</h1>
               <p className="text-lg text-muted-foreground">
-                {session.minutes} minute{session.minutes === 1 ? '' : 's'} of {recharge.name.toLowerCase()}. That was part of the work, not a break from it.
+                There is nothing to report or score. Take the time you need.
               </p>
             </div>
-            <RechargeCheckin session={session} />
             <Button asChild size="lg" className="h-12 rounded-full text-base">
-              <Link to="/">Back to your plan</Link>
+              <Link to="/">Back to the team workspace</Link>
             </Button>
           </div>
         )}

@@ -5,13 +5,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createHead, UnheadProvider } from '@unhead/react/client';
 import { InferSeoMetaPlugin } from 'unhead/plugins';
 import { Suspense } from 'react';
-import NostrProvider from '@/components/NostrProvider';
-import { NostrSync } from '@/components/NostrSync';
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { NostrLoginProvider } from '@nostrify/react/login';
 import { AppProvider } from '@/components/AppProvider';
-import { RestProvider } from '@/components/RestProvider';
 import { AppConfig } from '@/contexts/AppContext';
 import { APP_RELAYS } from '@/lib/appRelays';
 import AppRouter from './AppRouter';
@@ -51,19 +47,12 @@ export function App() {
     <UnheadProvider head={head}>
       <AppProvider storageKey="nostr:app-config" defaultConfig={defaultConfig}>
         <QueryClientProvider client={queryClient}>
-          <NostrLoginProvider storageKey='nostr:login'>
-            <NostrProvider>
-              <NostrSync />
-              <RestProvider>
-                <TooltipProvider>
-                  <Toaster />
-                  <Suspense>
-                    <AppRouter />
-                  </Suspense>
-                </TooltipProvider>
-              </RestProvider>
-            </NostrProvider>
-          </NostrLoginProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Suspense>
+              <AppRouter />
+            </Suspense>
+          </TooltipProvider>
         </QueryClientProvider>
       </AppProvider>
     </UnheadProvider>
