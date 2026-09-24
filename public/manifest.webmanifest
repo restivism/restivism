@@ -1,9 +1,10 @@
 {
   "name": "Restivism",
   "short_name": "Restivism",
-  "description": "A rest companion for activists and organizers. Rest is resistance.",
+  "description": "A team covenant, a shared rest rota, and explicit handovers. Rest is resistance.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0f0d1f",
-  "theme_color": "#2a2159"
+  "theme_color": "#2a2159",
+  "icons": [{"src":"/favicon.svg","sizes":"any","type":"image/svg+xml","purpose":"any"}]
 }
