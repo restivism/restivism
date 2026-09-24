@@ -15,6 +15,30 @@ export function primeAudio(): void {
   if (audio?.state === 'suspended') void audio.resume();
 }
 
+/** A bright rising arpeggio, one step per bar gained. */
+export function playChargeUp(bars: number, volume = 0.16): void {
+  const audio = getContext();
+  if (!audio || bars <= 0) return;
+  if (audio.state === 'suspended') void audio.resume();
+
+  // C major, climbing: one note per bar, then a sparkle on top.
+  const scale = [523.25, 659.25, 783.99, 1046.5, 1318.5];
+  const notes = [...scale.slice(0, Math.min(bars, 4)), scale[4]];
+  notes.forEach((freq, i) => {
+    const t = audio.currentTime + 0.05 + i * 0.13;
+    const osc = audio.createOscillator();
+    const amp = audio.createGain();
+    osc.type = 'triangle';
+    osc.frequency.value = freq;
+    amp.gain.setValueAtTime(0, t);
+    amp.gain.linearRampToValueAtTime(volume, t + 0.01);
+    amp.gain.exponentialRampToValueAtTime(0.0001, t + (i === notes.length - 1 ? 1.6 : 0.5));
+    osc.connect(amp).connect(audio.destination);
+    osc.start(t);
+    osc.stop(t + 1.7);
+  });
+}
+
 /** A soft singing-bowl chime synthesized with the Web Audio API. */
 export function playChime(volume = 0.25): void {
   const audio = getContext();

@@ -2,9 +2,12 @@ import { useState } from 'react';
 
 import type { CheckinResult } from '@/contexts/RestContext';
 import { useRest } from '@/hooks/useRest';
-import { ENERGY_LEVELS, type RestSession } from '@/lib/rest';
+import { playChargeUp } from '@/lib/chime';
+import { ENERGY_LEVELS, getRecharge, type RestSession } from '@/lib/rest';
 
 import { BatteryControl, BatteryGlyph } from './BatteryControl';
+import { ChargeUp } from './ChargeUp';
+import { ShareRecharge } from './ShareRecharge';
 
 function message(result: CheckinResult): string {
   if (result.gained === undefined) return 'Noted. Your plan has been updated for this reading.';
@@ -19,6 +22,7 @@ export function RechargeCheckin({ session }: { session: RestSession }) {
   const live = state.sessions.find((s) => s.id === session.id) ?? session;
   const [result, setResult] = useState<CheckinResult>();
   const before = live.energyBefore;
+  const after = live.energyAfter;
 
   return (
     <section aria-labelledby="recheck-heading" className="space-y-4 rounded-2xl border bg-card/70 p-5 backdrop-blur">
@@ -32,15 +36,32 @@ export function RechargeCheckin({ session }: { session: RestSession }) {
       </div>
       <BatteryControl
         size="md"
-        value={live.energyAfter}
-        onChange={(level) => setResult(checkIn(level, session.id))}
+        value={after}
+        onChange={(level) => {
+          const next = checkIn(level, session.id);
+          if (next.gained && state.settings.music) playChargeUp(next.gained);
+          setResult(next);
+        }}
         label="How charged do you feel after resting?"
       />
-      <div aria-live="polite">
-        {result && (
-          <p className="rounded-xl bg-muted/60 px-4 py-3 text-base font-semibold motion-safe:animate-in motion-safe:fade-in">
-            {message(result)}
-          </p>
+      <div aria-live="polite" className="space-y-4">
+        {result && after && (
+          <>
+            <ChargeUp key={after} before={before} after={after} />
+            <p className="rounded-xl bg-muted/60 px-4 py-3 text-center text-base font-semibold motion-safe:animate-in motion-safe:fade-in">
+              {message(result)}
+            </p>
+            <div className="flex justify-center">
+              <ShareRecharge
+                card={{
+                  rechargeName: getRecharge(live.practice)?.name.toLowerCase() ?? 'rest',
+                  minutes: live.minutes,
+                  before,
+                  after,
+                }}
+              />
+            </div>
+          </>
         )}
       </div>
     </section>
