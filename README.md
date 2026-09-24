@@ -13,8 +13,11 @@ of depending on one person to push through.
 
 1. **Check in.** Set your battery from 1 (running on fumes) to 5 (fully charged).
    Or say it out loud: speak for up to 30 seconds and Restivism suggests a level
-   from how your voice sounds — loudness, tone (pitch movement), and emphasis.
-   You confirm the suggestion or tap the level that feels true.
+   from how your voice sounds — loudness, tone (pitch movement), and emphasis —
+   and, where the browser can transcribe on the device, from mood words like
+   "quit" or "exhausted". You confirm the suggestion or tap the level that feels
+   true. If someone mentions suicide or self-harm, Restivism skips the reading
+   and points them to a helpline instead.
 2. **Get a plan.** Restivism recommends play, sleep, or social time plus a few small
    acts of care.
 3. **Recharge.** Start a timed rest session.
@@ -86,8 +89,11 @@ to Nostr or inventing a weak shared-key sync scheme.
 
 - Personal rest state stays in browser `localStorage` under `restivism:state`.
 - Voice check-ins are analysed in the browser with the Web Audio API. Audio is
-  never recorded, stored, or sent, and the words are never transcribed. Only the
-  level the user confirms is saved.
+  never recorded, stored, or sent. Words are only transcribed with the browser's
+  on-device speech recognition (`processLocally`, Chrome 139+, after a one-time
+  language download the user opts into); there is no cloud fallback, so other
+  browsers measure tone only. Transcripts are never saved. Only the level the
+  user confirms is saved.
 - Organization rest records are namespaced by organization ID.
 - Organization agreement, coverage, and reflection data are not published to Nostr.
 - There is no analytics, streak system, leaderboard, or individual performance
@@ -98,7 +104,8 @@ to Nostr or inventing a weak shared-key sync scheme.
 ## Features
 
 - Battery check-in with level-matched recharge plans
-- Optional voice check-in measuring loudness, tone, and emphasis on the device
+- Optional voice check-in measuring loudness, tone, emphasis, and mood words on the device
+- Crisis support card when a voice check-in mentions suicide or self-harm
 - Timed play, sleep, and social rest sessions
 - Create or join an organization
 - Leader-created passcode + encrypted organization invite

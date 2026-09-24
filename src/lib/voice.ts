@@ -1,9 +1,11 @@
 import { getContext } from './chime';
+import type { WordReading } from './words';
 
 /**
- * Voice check-in: listen to a few seconds of speech and turn how it sounds
- * into a battery reading. Everything runs on the device with the Web Audio
- * API. Audio is never stored or sent anywhere, and we never look at the words.
+ * Voice check-in: listen to some speech and turn how it sounds (and, where
+ * the browser can transcribe on the device, what was said) into a battery
+ * reading. Everything runs on the device with the Web Audio API. Audio is
+ * never stored or sent anywhere.
  *
  * The measures are acoustic proxies for vocal energy, not a diagnosis:
  * - Loudness: average level of the voiced frames, in dBFS.
@@ -11,6 +13,8 @@ import { getContext } from './chime';
  *   well-known marker of fatigue; lively speech moves around.
  * - Emphasis: how often the voice punches above its own baseline, per second.
  * - Presence: how much of the recording was spent speaking.
+ *
+ * When mood words were heard (see `words.ts`), they count for half.
  */
 
 /** One analysis frame. `pitch` is undefined when the frame is not voiced. */
@@ -28,6 +32,8 @@ export interface VoiceReading {
   presence: number;
   /** Each measure mapped to 0–1. */
   scores: { loudness: number; tone: number; emphasis: number; presence: number };
+  /** What was said, when the browser could transcribe it. */
+  words?: WordReading;
   /** 0–100. */
   energy: number;
   /** Suggested battery level, 1–5. */
@@ -102,7 +108,7 @@ export function analyseFrame(samples: Float32Array, sampleRate: number): VoiceFr
 }
 
 /** Summarise a recording's frames, or undefined if too little was spoken. */
-export function summarise(frames: VoiceFrame[]): VoiceReading | undefined {
+export function summarise(frames: VoiceFrame[], words?: WordReading): VoiceReading | undefined {
   const voiced = frames.filter((f): f is Required<VoiceFrame> => f.pitch !== undefined);
   const voicedSeconds = voiced.length * FRAME_SECONDS;
   if (voicedSeconds < MIN_VOICED_SECONDS) return undefined;
@@ -133,10 +139,11 @@ export function summarise(frames: VoiceFrame[]): VoiceReading | undefined {
     emphasis: scale(emphasisPerSecond, 0.2, 1.5),
     presence: scale(presence, 0.2, 0.7),
   };
-  const energy = Math.round(100 * (0.3 * scores.loudness + 0.3 * scores.tone + 0.25 * scores.emphasis + 0.15 * scores.presence));
+  const sound = 0.3 * scores.loudness + 0.3 * scores.tone + 0.25 * scores.emphasis + 0.15 * scores.presence;
+  const energy = Math.round(100 * (words?.score === undefined ? sound : (sound + words.score) / 2));
   const level = Math.min(5, 1 + Math.floor(energy / 20));
 
-  return { voicedSeconds, loudnessDb, pitchSpreadSemitones, emphasisPerSecond, presence, scores, energy, level };
+  return { voicedSeconds, loudnessDb, pitchSpreadSemitones, emphasisPerSecond, presence, scores, words, energy, level };
 }
 
 export interface Recording {
