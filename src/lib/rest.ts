@@ -213,6 +213,8 @@ export interface RestSettings {
   /** Minutes between reminders, 0 = off. */
   reminderMinutes: number;
   chime: boolean;
+  /** Play Taps when you check in on an empty battery. */
+  music: boolean;
 }
 
 export interface RestState {
@@ -238,6 +240,7 @@ export const DEFAULT_REST_STATE: RestState = {
     dailyGoal: 30,
     reminderMinutes: 0,
     chime: true,
+    music: true,
   },
 };
 

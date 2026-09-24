@@ -1,7 +1,6 @@
 import { type KeyboardEvent, useRef } from 'react';
 
 import { ENERGY_LEVELS, LEVEL_COLOR } from '@/lib/rest';
-import { playBatterySong } from '@/lib/songs';
 import { cn } from '@/lib/utils';
 
 interface BatteryControlProps {
@@ -28,11 +27,6 @@ export function BatteryControl({
 }: BatteryControlProps) {
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
 
-  const select = (level: number) => {
-    playBatterySong(level);
-    onChange(level);
-  };
-
   const handleKey = (e: KeyboardEvent, level: number) => {
     let next: number | undefined;
     if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = Math.min(5, level + 1);
@@ -42,7 +36,7 @@ export function BatteryControl({
     if (next === undefined) return;
     e.preventDefault();
     refs.current[next - 1]?.focus();
-    select(next);
+    onChange(next);
   };
 
   return (
@@ -65,7 +59,7 @@ export function BatteryControl({
             aria-checked={checked}
             aria-label={levelLabel}
             tabIndex={tabbable ? 0 : -1}
-            onClick={() => select(level)}
+            onClick={() => onChange(level)}
             onKeyDown={(e) => handleKey(e, level)}
             className={cn(
               'flex flex-col items-center rounded-2xl border font-semibold transition-all',

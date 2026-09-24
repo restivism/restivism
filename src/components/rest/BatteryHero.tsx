@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { Volume2, VolumeX } from 'lucide-react';
+import { useState, useSyncExternalStore } from 'react';
 
 import { ENERGY_LEVELS, type EnergyCheckin, LEVEL_COLOR, recentCheckin, type RestSession } from '@/lib/rest';
+import { isTapsPlaying, playTaps, stopTaps, subscribeTaps } from '@/lib/taps';
 import { cn } from '@/lib/utils';
 import { useRest } from '@/hooks/useRest';
 
@@ -75,6 +77,32 @@ function HeroBackdrop({ level }: { level?: number }) {
   );
 }
 
+/**
+ * Mutes Taps. Only shown while it plays or once muted, so unmuting in
+ * silence makes the button go away again.
+ */
+function MusicToggle({ muted, onToggle }: { muted: boolean; onToggle: () => void }) {
+  const playing = useSyncExternalStore(subscribeTaps, isTapsPlaying);
+  if (!playing && !muted) return null;
+  const Icon = muted ? VolumeX : Volume2;
+
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-label={muted ? 'Unmute music' : 'Mute music'}
+      title={muted ? 'Unmute music' : 'Mute music'}
+      className={cn(
+        'absolute right-4 top-4 z-10 flex size-11 items-center justify-center rounded-full border border-white/25 bg-black/30 text-white backdrop-blur-md transition-colors sm:right-6 sm:top-6',
+        'hover:border-white/60 hover:bg-black/40 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-white/60',
+        'motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-90',
+      )}
+    >
+      <Icon className="size-5" aria-hidden />
+    </button>
+  );
+}
+
 interface BatteryHeroProps {
   now: number;
   onCheckIn?: (level: number) => void;
@@ -82,7 +110,8 @@ interface BatteryHeroProps {
 
 /** The first thing you see: a giant battery asking how charged you are. */
 export function BatteryHero({ now, onCheckIn }: BatteryHeroProps) {
-  const { state, checkIn } = useRest();
+  const { state, checkIn, updateSettings } = useRest();
+  const muted = !state.settings.music;
   const current = recentCheckin(state.checkins, now);
   const latest = state.checkins[state.checkins.length - 1];
   const lastSession = state.sessions[state.sessions.length - 1];
@@ -102,6 +131,14 @@ export function BatteryHero({ now, onCheckIn }: BatteryHeroProps) {
         />
       )}
 
+      <MusicToggle
+        muted={muted}
+        onToggle={() => {
+          if (!muted) stopTaps();
+          updateSettings({ music: muted });
+        }}
+      />
+
       <div className="mx-auto max-w-3xl px-4 pb-20 pt-10 sm:px-6 sm:pb-28 sm:pt-16">
         <p className="text-lg font-semibold text-white/85">{greeting(new Date(now).getHours())}</p>
         <h1 id="battery-heading" className="mt-1 text-5xl font-semibold leading-[1.05] tracking-tight text-white drop-shadow-sm sm:text-7xl">
@@ -114,6 +151,8 @@ export function BatteryHero({ now, onCheckIn }: BatteryHeroProps) {
         <BatteryControl
           value={current?.level}
           onChange={(level) => {
+            if (level === 1 && !muted) playTaps();
+            else stopTaps();
             checkIn(level);
             onCheckIn?.(level);
           }}
