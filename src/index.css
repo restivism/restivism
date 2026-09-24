@@ -40,28 +40,15 @@
 
   --color-ember: var(--ember);
   --color-ember-foreground: var(--ember-foreground);
-  --color-moon: var(--moon);
 
   --font-sans: 'Nunito Variable', 'Nunito', system-ui, sans-serif;
   --font-display: 'Fraunces Variable', 'Fraunces', Georgia, serif;
 
-  --animate-breathe: breathe 14s ease-in-out infinite;
   --animate-float: float 8s ease-in-out infinite;
-  --animate-twinkle: twinkle 4s ease-in-out infinite;
-
-  @keyframes breathe {
-    0%, 100% { transform: scale(0.6); }
-    28.5%, 57% { transform: scale(1); }
-  }
 
   @keyframes float {
     0%, 100% { transform: translateY(0); }
     50% { transform: translateY(-6px); }
-  }
-
-  @keyframes twinkle {
-    0%, 100% { opacity: 0.25; }
-    50% { opacity: 1; }
   }
 
   --color-sidebar: var(--sidebar);
@@ -143,7 +130,6 @@
 
   --ember: hsl(26 88% 50%);
   --ember-foreground: hsl(22 80% 26%);
-  --moon: hsl(44 85% 70%);
 
   --chart-1: hsl(252 45% 46%);
   --chart-2: hsl(26 88% 55%);
@@ -162,7 +148,7 @@
 }
 
 .dark {
-  /* Night: deep indigo sky, moonlight text, ember accents */
+  /* Night: deep indigo sky, warm light text, ember accents */
   --background: hsl(248 38% 8%);
   --foreground: hsl(40 35% 93%);
 
@@ -193,7 +179,6 @@
 
   --ember: hsl(30 95% 62%);
   --ember-foreground: hsl(34 95% 76%);
-  --moon: hsl(44 90% 78%);
 
   --chart-1: hsl(256 75% 78%);
   --chart-2: hsl(30 95% 62%);

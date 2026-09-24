@@ -7,7 +7,7 @@ import { ENERGY_LEVELS, type RestSession } from '@/lib/rest';
 import { BatteryControl, BatteryGlyph } from './BatteryControl';
 
 function message(result: CheckinResult): string {
-  if (result.gained === undefined) return 'Noted. Next time, check in before you rest too, and we can show you what it gave you.';
+  if (result.gained === undefined) return 'Noted. Your plan has been updated for this reading.';
   if (result.gained > 0) return `+${result.gained} bar${result.gained === 1 ? '' : 's'}. That is what rest does.`;
   if (result.gained === 0) return 'Same as before. Some rest works slowly, and it still counts.';
   return 'Lower than before. Sometimes stopping shows you how tired you really were. Be gentle with yourself tonight.';
@@ -38,12 +38,9 @@ export function RechargeCheckin({ session }: { session: RestSession }) {
       />
       <div aria-live="polite">
         {result && (
-          <div className="space-y-1 rounded-xl bg-muted/60 px-4 py-3 motion-safe:animate-in motion-safe:fade-in">
-            <p className="text-base font-semibold">{message(result)}</p>
-            {result.embers && (
-              <p className="text-sm text-ember-foreground">+{result.embers} embers for checking back in</p>
-            )}
-          </div>
+          <p className="rounded-xl bg-muted/60 px-4 py-3 text-base font-semibold motion-safe:animate-in motion-safe:fade-in">
+            {message(result)}
+          </p>
         )}
       </div>
     </section>

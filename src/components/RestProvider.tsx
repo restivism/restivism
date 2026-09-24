@@ -1,18 +1,7 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { type CheckinResult, RestContext, type RestContextType, type SessionResult } from '@/contexts/RestContext';
-import { toast } from '@/hooks/useToast';
-import {
-  awardBadges,
-  type Badge,
-  calculateEmbers,
-  dayKey,
-  DEFAULT_REST_STATE,
-  levelFor,
-  rechargeBonus,
-  type RestState,
-  totalEmbers,
-} from '@/lib/rest';
+import { type CheckinResult, RestContext, type RestContextType } from '@/contexts/RestContext';
+import { dayKey, DEFAULT_REST_STATE, recentCheckin, type RestState } from '@/lib/rest';
 
 const STORAGE_KEY = 'restful:state';
 
@@ -28,18 +17,10 @@ function loadState(): RestState {
       sessions: Array.isArray(p.sessions) ? p.sessions : [],
       checkins: Array.isArray(p.checkins) ? p.checkins : [],
       quests: p.quests && typeof p.quests === 'object' ? p.quests : {},
-      badges: p.badges && typeof p.badges === 'object' ? p.badges : {},
-      shares: typeof p.shares === 'number' ? p.shares : 0,
-      settings: { ...DEFAULT_REST_STATE.settings, ...p.settings },
+      settings: { ...DEFAULT_REST_STATE.settings, music: p.settings?.music ?? DEFAULT_REST_STATE.settings.music },
     };
   } catch {
     return DEFAULT_REST_STATE;
-  }
-}
-
-function announceBadges(earned: Badge[]) {
-  for (const badge of earned) {
-    toast({ title: `Badge earned: ${badge.name}`, description: badge.description });
   }
 }
 
@@ -69,29 +50,18 @@ export function RestProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('storage', onStorage);
   }, []);
 
-  const completeSession = useCallback<RestContextType['completeSession']>(({ practice, minutes, logged }) => {
+  const completeSession = useCallback<RestContextType['completeSession']>(({ practice, minutes }) => {
     const prev = stateRef.current;
     const now = Date.now();
-    const { total, lines, lowEnergy, energyBefore } = calculateEmbers(prev, { minutes, logged, now });
     const session = {
       id: crypto.randomUUID(),
       practice,
       endedAt: now,
       minutes: Math.round(minutes),
-      embers: total,
-      logged,
-      lowEnergy,
-      energyBefore,
+      energyBefore: recentCheckin(prev.checkins, now, 6)?.level,
     };
-    const withSession = { ...prev, sessions: [...prev.sessions, session] };
-    const { state: next, earned } = awardBadges(withSession, now);
-    commit(next);
-
-    const before = levelFor(totalEmbers(prev)).level;
-    const after = levelFor(totalEmbers(next)).level;
-    const result: SessionResult = { session, lines, earned };
-    if (after.index > before.index) result.levelUp = after;
-    return result;
+    commit({ ...prev, sessions: [...prev.sessions, session].slice(-500) });
+    return session;
   }, [commit]);
 
   const checkIn = useCallback<RestContextType['checkIn']>((level, sessionId) => {
@@ -103,10 +73,8 @@ export function RestProvider({ children }: { children: ReactNode }) {
     if (sessionId) {
       sessions = sessions.map((s) => {
         if (s.id !== sessionId) return s;
-        const bonus = rechargeBonus(s.energyBefore, level);
-        result.embers = bonus;
         if (s.energyBefore) result.gained = level - s.energyBefore;
-        return { ...s, energyAfter: level, rechargeEmbers: bonus };
+        return { ...s, energyAfter: level };
       });
     }
 
@@ -115,9 +83,7 @@ export function RestProvider({ children }: { children: ReactNode }) {
     const base = sessionId && last?.sessionId === sessionId ? prev.checkins.slice(0, -1) : prev.checkins;
     const checkins = [...base, { at, level, sessionId }].slice(-500);
 
-    const { state: next, earned } = awardBadges({ ...prev, sessions, checkins }, at);
-    commit(next);
-    announceBadges(earned);
+    commit({ ...prev, sessions, checkins });
     return result;
   }, [commit]);
 
@@ -126,16 +92,7 @@ export function RestProvider({ children }: { children: ReactNode }) {
     const key = dayKey(Date.now());
     const done = prev.quests[key] ?? [];
     const nextDone = done.includes(id) ? done.filter((q) => q !== id) : [...done, id];
-    const { state: next, earned } = awardBadges({ ...prev, quests: { ...prev.quests, [key]: nextDone } });
-    commit(next);
-    announceBadges(earned);
-  }, [commit]);
-
-  const recordShare = useCallback(() => {
-    const prev = stateRef.current;
-    const { state: next, earned } = awardBadges({ ...prev, shares: prev.shares + 1 });
-    commit(next);
-    announceBadges(earned);
+    commit({ ...prev, quests: { ...prev.quests, [key]: nextDone } });
   }, [commit]);
 
   const updateSettings = useCallback<RestContextType['updateSettings']>((patch) => {
@@ -143,58 +100,13 @@ export function RestProvider({ children }: { children: ReactNode }) {
     commit({ ...prev, settings: { ...prev.settings, ...patch } });
   }, [commit]);
 
-  const resetAll = useCallback(() => {
-    commit(DEFAULT_REST_STATE);
-  }, [commit]);
-
-  useRestReminders(state);
-
   const value = useMemo<RestContextType>(() => ({
     state,
     completeSession,
     checkIn,
     toggleQuest,
-    recordShare,
     updateSettings,
-    resetAll,
-  }), [state, completeSession, checkIn, toggleQuest, recordShare, updateSettings, resetAll]);
+  }), [state, completeSession, checkIn, toggleQuest, updateSettings]);
 
   return <RestContext.Provider value={value}>{children}</RestContext.Provider>;
-}
-
-/** While the app is open, periodically remind the user to take a break. */
-function useRestReminders(state: RestState) {
-  const lastReminded = useRef(0);
-  const interval = state.settings.reminderMinutes;
-  const lastSession = state.sessions[state.sessions.length - 1]?.endedAt ?? 0;
-
-  useEffect(() => {
-    if (!interval) return;
-    // Count from when reminders were switched on or the app was opened.
-    lastReminded.current = Math.max(lastReminded.current, Date.now());
-
-    const tick = () => {
-      const now = Date.now();
-      const hour = new Date(now).getHours();
-      if (hour < 8 || hour >= 23) return;
-      if (now - Math.max(lastSession, lastReminded.current) < interval * 60_000) return;
-      lastReminded.current = now;
-
-      const title = 'How is your battery?';
-      const body = 'You have been going for a while. Check in, and take the break it asks for.';
-
-      if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
-        try {
-          new Notification(title, { body, icon: '/dusk.webp', tag: 'restful-reminder' });
-          return;
-        } catch {
-          // Some mobile browsers only allow notifications from a service worker.
-        }
-      }
-      toast({ title, description: body });
-    };
-
-    const id = window.setInterval(tick, 60_000);
-    return () => window.clearInterval(id);
-  }, [interval, lastSession]);
 }

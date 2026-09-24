@@ -1,77 +1,68 @@
 import { useSeoMeta } from '@unhead/react';
-import { ArrowLeft, Pause, Play, RotateCcw, Square } from 'lucide-react';
+import { ArrowLeft, Pause, Play, Square } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { ProgressRing } from '@/components/rest/ProgressRing';
 import { RechargeCheckin } from '@/components/rest/RechargeCheckin';
-import { RewardSummary } from '@/components/rest/RewardSummary';
-import { ShareToCircle } from '@/components/rest/ShareToCircle';
 import { Button } from '@/components/ui/button';
-import type { SessionResult } from '@/contexts/RestContext';
 import { useRest } from '@/hooks/useRest';
 import { playChime, primeAudio } from '@/lib/chime';
-import { getPractice, type Practice } from '@/lib/rest';
+import { getRecharge, type Recharge, type RestSession as Session } from '@/lib/rest';
 import { cn } from '@/lib/utils';
 import NotFound from './NotFound';
 
 type Stage = 'setup' | 'running' | 'done';
 
-const TIPS: Partial<Record<Practice['id'], string>> = {
-  breathe: 'Sit or lie comfortably. Follow the circle: in as it grows, hold, and out slowly as it shrinks.',
-  nap: 'Turn on Do Not Disturb and keep this screen open. We will wake you with a soft chime.',
-  unplug: 'Start the timer, then turn your phone face down. Come back when you hear the chime.',
-  wander: 'Pocket your phone. Leave the headphones. We will chime when it is time to head back.',
-  nothing: 'Sit somewhere comfortable. There is no technique. That is the technique.',
-  bodyscan: 'Lie down or sit back. We will guide your attention slowly from head to toe.',
-};
-
 export default function RestSession() {
   const { practiceId } = useParams();
-  const practice = getPractice(practiceId);
-  if (!practice?.guided) return <NotFound />;
-  return <SessionFlow key={practice.id} practice={practice} />;
+  const recharge = getRecharge(practiceId);
+  if (!recharge) return <NotFound />;
+  return <SessionFlow key={recharge.id} recharge={recharge} />;
 }
 
-function SessionFlow({ practice }: { practice: Practice }) {
+function SessionFlow({ recharge }: { recharge: Recharge }) {
   const [params] = useSearchParams();
   const requested = Number(params.get('m'));
   const durations =
-    Number.isInteger(requested) && requested > 0 && requested <= 180 && !practice.durations.includes(requested)
-      ? [...practice.durations, requested].sort((a, b) => a - b)
-      : practice.durations;
-  const initial = durations.includes(requested) ? requested : practice.defaultDuration;
+    Number.isInteger(requested) && requested > 0 && requested <= 180 && !recharge.durations.includes(requested)
+      ? [...recharge.durations, requested].sort((a, b) => a - b)
+      : recharge.durations;
+  const initial = durations.includes(requested) ? requested : recharge.durations[0];
 
   const [stage, setStage] = useState<Stage>('setup');
   const [minutes, setMinutes] = useState(initial);
-  const [result, setResult] = useState<SessionResult>();
-  const { state, completeSession } = useRest();
+  const [session, setSession] = useState<Session>();
+  const { completeSession } = useRest();
 
-  useSeoMeta({ title: `${practice.name} | Restful` });
+  useSeoMeta({ title: `${recharge.name} | Restful` });
 
   const finish = useCallback((rested: number) => {
-    if (state.settings.chime) playChime();
-    setResult(completeSession({ practice: practice.id, minutes: rested }));
+    playChime();
+    setSession(completeSession({ practice: recharge.id, minutes: rested }));
     setStage('done');
-  }, [completeSession, practice.id, state.settings.chime]);
+  }, [completeSession, recharge.id]);
 
-  const Icon = practice.icon;
+  const Icon = recharge.icon;
 
   return (
     <div className="dark relative isolate min-h-dvh overflow-hidden bg-background text-foreground">
-      <Backdrop practice={practice} />
+      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
+        <div className={cn('absolute inset-0 bg-gradient-to-b opacity-60', recharge.gradient)} />
+        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />
+      </div>
 
       <div className="mx-auto flex min-h-dvh max-w-xl flex-col px-4 py-6 sm:px-6">
         <header className="flex items-center justify-between">
           <Button asChild variant="ghost" className="rounded-full text-base">
             <Link to="/">
               <ArrowLeft className="size-5" aria-hidden />
-              {stage === 'done' ? 'Today' : 'Back'}
+              Your plan
             </Link>
           </Button>
           <span className="flex items-center gap-2 text-base font-semibold text-muted-foreground">
             <Icon className="size-5" aria-hidden />
-            {practice.name}
+            {recharge.name}
           </span>
         </header>
 
@@ -81,8 +72,8 @@ function SessionFlow({ practice }: { practice: Practice }) {
               <span className="mx-auto grid size-20 place-items-center rounded-full bg-primary/15 text-primary motion-safe:animate-float">
                 <Icon className="size-10" aria-hidden />
               </span>
-              <h1 className="text-5xl font-semibold tracking-tight">{practice.name}</h1>
-              <p className="mx-auto max-w-md text-lg leading-relaxed text-muted-foreground">{TIPS[practice.id]}</p>
+              <h1 className="text-5xl font-semibold tracking-tight">{recharge.name}</h1>
+              <p className="mx-auto max-w-md text-lg leading-relaxed text-muted-foreground">{recharge.tip}</p>
             </div>
 
             <fieldset>
@@ -112,7 +103,7 @@ function SessionFlow({ practice }: { practice: Practice }) {
               className="mx-auto h-14 w-full max-w-xs rounded-full text-lg"
               onClick={() => {
                 primeAudio();
-                if (state.settings.chime) playChime(0.12);
+                playChime(0.12);
                 setStage('running');
               }}
             >
@@ -121,65 +112,26 @@ function SessionFlow({ practice }: { practice: Practice }) {
           </div>
         )}
 
-        {stage === 'running' && <Running practice={practice} minutes={minutes} onFinish={finish} />}
+        {stage === 'running' && <Running recharge={recharge} minutes={minutes} onFinish={finish} />}
 
-        {stage === 'done' && result && (
+        {stage === 'done' && session && (
           <div className="flex flex-1 flex-col justify-center gap-8 py-10 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-700">
             <div className="space-y-3 text-center">
               <h1 className="text-5xl font-semibold tracking-tight">Welcome back.</h1>
               <p className="text-lg text-muted-foreground">
-                You rested for {result.session.minutes} minute{result.session.minutes === 1 ? '' : 's'}. That was an act of resistance.
+                {session.minutes} minute{session.minutes === 1 ? '' : 's'} of {recharge.name.toLowerCase()}. That was part of the work, not a break from it.
               </p>
             </div>
-            <RechargeCheckin session={result.session} />
-            <RewardSummary result={result} />
-            <ShareToCircle practice={practice} minutes={result.session.minutes} />
-            <div className="grid grid-cols-2 gap-3">
-              <Button asChild size="lg" className="h-12 rounded-full text-base">
-                <Link to="/">Back to today</Link>
-              </Button>
-              <Button
-                size="lg"
-                variant="outline"
-                className="h-12 rounded-full text-base"
-                onClick={() => {
-                  setResult(undefined);
-                  setStage('setup');
-                }}
-              >
-                <RotateCcw className="size-4" aria-hidden />
-                Rest again
-              </Button>
-            </div>
+            <RechargeCheckin session={session} />
+            <Button asChild size="lg" className="h-12 rounded-full text-base">
+              <Link to="/">Back to your plan</Link>
+            </Button>
           </div>
         )}
       </div>
     </div>
   );
 }
-
-function Backdrop({ practice }: { practice: Practice }) {
-  return (
-    <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
-      <div className={cn('absolute inset-0 bg-gradient-to-b opacity-60', practice.gradient)} />
-      <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />
-      {STARS.map(([x, y, s, d], i) => (
-        <span
-          key={i}
-          className="absolute rounded-full bg-white motion-safe:animate-twinkle"
-          style={{ left: `${x}%`, top: `${y}%`, width: s, height: s, animationDelay: `${d}s` }}
-        />
-      ))}
-    </div>
-  );
-}
-
-// [left %, top %, size px, delay s]
-const STARS: [number, number, number, number][] = [
-  [8, 12, 2, 0], [22, 6, 1.5, 1.2], [35, 18, 2, 2.4], [51, 9, 1, 0.6], [64, 15, 2, 3.1],
-  [77, 5, 1.5, 1.8], [89, 20, 2, 0.3], [14, 30, 1, 2.9], [70, 32, 1.5, 1.1], [93, 38, 1, 2.2],
-  [4, 44, 1.5, 3.5], [45, 3, 1.5, 0.9],
-];
 
 function useWakeLock(active: boolean) {
   useEffect(() => {
@@ -208,18 +160,19 @@ function useWakeLock(active: boolean) {
 
 function formatClock(ms: number): string {
   const total = Math.max(0, Math.ceil(ms / 1000));
-  const m = Math.floor(total / 60);
-  const s = total % 60;
-  return `${m}:${String(s).padStart(2, '0')}`;
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = String(total % 60).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`;
 }
 
 interface RunningProps {
-  practice: Practice;
+  recharge: Recharge;
   minutes: number;
   onFinish: (minutes: number) => void;
 }
 
-function Running({ practice, minutes, onFinish }: RunningProps) {
+function Running({ recharge, minutes, onFinish }: RunningProps) {
   const navigate = useNavigate();
   const totalMs = minutes * 60_000;
   // Wall-clock timing so the session stays accurate if the tab is backgrounded.
@@ -263,44 +216,31 @@ function Running({ practice, minutes, onFinish }: RunningProps) {
     else navigate('/');
   };
 
-  let prompt: string | undefined;
-  if (practice.prompts.length) {
-    const i =
-      practice.id === 'bodyscan'
-        ? Math.min(practice.prompts.length - 1, Math.floor(elapsed / (totalMs / practice.prompts.length)))
-        : Math.floor(elapsed / 30_000) % practice.prompts.length;
-    prompt = practice.prompts[i];
-  }
+  const prompt = recharge.prompts[Math.floor(elapsed / 60_000) % recharge.prompts.length];
 
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-10 py-10">
-      {practice.id === 'breathe' ? (
-        <BreathingOrb elapsed={elapsed} paused={pausedAt !== null} remaining={remaining} />
-      ) : (
-        <ProgressRing
-          value={elapsed / totalMs}
-          size={260}
-          stroke={8}
-          trackClassName="stroke-white/10"
-          barClassName="stroke-primary"
-          label="Session progress"
-        >
-          <div>
-            <p className="font-display text-6xl font-light tabular-nums" aria-live="off">{formatClock(remaining)}</p>
-            <p className="mt-1 text-base text-muted-foreground">{pausedAt ? 'Paused' : 'remaining'}</p>
-          </div>
-        </ProgressRing>
-      )}
+      <ProgressRing
+        value={elapsed / totalMs}
+        size={260}
+        stroke={8}
+        trackClassName="stroke-white/10"
+        barClassName="stroke-primary"
+        label="Time progress"
+      >
+        <div>
+          <p className="font-display text-6xl font-light tabular-nums" aria-live="off">{formatClock(remaining)}</p>
+          <p className="mt-1 text-base text-muted-foreground">{pausedAt ? 'Paused' : 'remaining'}</p>
+        </div>
+      </ProgressRing>
 
-      {prompt && (
-        <p
-          key={prompt}
-          className="min-h-20 max-w-md text-center font-display text-2xl leading-snug motion-safe:animate-in motion-safe:fade-in motion-safe:duration-1000"
-          aria-live="polite"
-        >
-          {prompt}
-        </p>
-      )}
+      <p
+        key={prompt}
+        className="min-h-20 max-w-md text-center font-display text-2xl leading-snug motion-safe:animate-in motion-safe:fade-in motion-safe:duration-1000"
+        aria-live="polite"
+      >
+        {prompt}
+      </p>
 
       <div className="flex items-center gap-3">
         <Button variant="outline" size="lg" className="h-12 rounded-full px-6 text-base" onClick={togglePause}>
@@ -312,46 +252,6 @@ function Running({ practice, minutes, onFinish }: RunningProps) {
           {restedMinutes >= 1 ? `End (${restedMinutes} min)` : 'Leave'}
         </Button>
       </div>
-    </div>
-  );
-}
-
-const BREATH_CYCLE = 14; // 4 in, 4 hold, 6 out
-
-function BreathingOrb({ elapsed, paused, remaining }: { elapsed: number; paused: boolean; remaining: number }) {
-  const t = (elapsed / 1000) % BREATH_CYCLE;
-  let label: string;
-  let count: number;
-  if (t < 4) {
-    label = 'Breathe in';
-    count = Math.ceil(4 - t);
-  } else if (t < 8) {
-    label = 'Hold';
-    count = Math.ceil(8 - t);
-  } else {
-    label = 'Breathe out';
-    count = Math.ceil(BREATH_CYCLE - t);
-  }
-
-  return (
-    <div className="flex flex-col items-center gap-6">
-      <div className="relative grid size-72 place-items-center">
-        <div
-          className="absolute inset-0 rounded-full bg-gradient-to-br from-primary/60 via-sky-400/40 to-ember/40 blur-md motion-safe:animate-breathe"
-          style={{ animationPlayState: paused ? 'paused' : 'running' }}
-          aria-hidden
-        />
-        <div
-          className="absolute inset-6 rounded-full border border-white/20 bg-white/5 motion-safe:animate-breathe"
-          style={{ animationPlayState: paused ? 'paused' : 'running' }}
-          aria-hidden
-        />
-        <div className="relative text-center" aria-live="polite">
-          <p className="font-display text-3xl font-semibold">{paused ? 'Paused' : label}</p>
-          {!paused && <p className="mt-1 text-2xl tabular-nums text-foreground/80" aria-hidden>{count}</p>}
-        </div>
-      </div>
-      <p className="text-base tabular-nums text-muted-foreground">{formatClock(remaining)} remaining</p>
     </div>
   );
 }
