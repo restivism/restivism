@@ -552,7 +552,7 @@ function OrganizationWorkspace({
     }));
   };
 
-  const submitAlignment = (score: AlignmentScore, responseId: string) => {
+  const submitAlignment = (score: AlignmentScore, responseId: string, comment: string) => {
     if (membership.role !== 'member' || state.agreement.revision === 0) return;
 
     setState((previous) => {
@@ -561,6 +561,7 @@ function OrganizationWorkspace({
         id: responseId,
         agreementRevision: previous.agreement.revision,
         score,
+        comment: comment.trim() || undefined,
         recordedAt: Date.now(),
       };
 
@@ -1052,21 +1053,25 @@ function MemberCovenantAlignment({
   organizationId: string;
   membershipJoinedAt: number;
   revision: number;
-  onSubmit: (score: AlignmentScore, responseId: string) => void;
+  onSubmit: (score: AlignmentScore, responseId: string, comment: string) => void;
 }) {
   const storagePrefix = `restivism:alignment:${organizationId}:${membershipJoinedAt}:r${revision}`;
   const [savedScore, setSavedScore] = useLocalStorage<number>(`${storagePrefix}:score`, 0);
+  const [savedComment, setSavedComment] = useLocalStorage<string>(`${storagePrefix}:comment`, '');
   const [responseId, setResponseId] = useLocalStorage<string>(`${storagePrefix}:id`, crypto.randomUUID());
   const [draftScore, setDraftScore] = useState<AlignmentScore>(
     savedScore >= 1 && savedScore <= 5 ? savedScore as AlignmentScore : 3,
   );
+  const [draftComment, setDraftComment] = useState(savedComment);
 
   const selected = ALIGNMENT_LEVELS.find((level) => level.score === draftScore) ?? ALIGNMENT_LEVELS[2];
 
   const submit = () => {
+    const cleanedComment = draftComment.trim().slice(0, 500);
     setSavedScore(draftScore);
+    setSavedComment(cleanedComment);
     setResponseId(responseId);
-    onSubmit(draftScore, responseId);
+    onSubmit(draftScore, responseId, cleanedComment);
   };
 
   return (
@@ -1101,6 +1106,23 @@ function MemberCovenantAlignment({
         {ALIGNMENT_LEVELS.map((level) => <span key={level.score}>{level.emoji}</span>)}
       </div>
 
+      <label className="mt-5 block space-y-2">
+        <span className="font-semibold">
+          Anything you want leaders to understand? <span className="font-normal text-muted-foreground">(optional)</span>
+        </span>
+        <textarea
+          value={draftComment}
+          onChange={(event) => setDraftComment(event.target.value)}
+          rows={4}
+          maxLength={500}
+          placeholder="What feels supportive, unclear, unrealistic, or missing?"
+          className="w-full rounded-xl border bg-background px-4 py-3 text-base leading-relaxed outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        />
+        <span className="block text-xs leading-relaxed text-muted-foreground">
+          This is shown without your name or rating. Avoid including details that could identify you or someone else.
+        </span>
+      </label>
+
       <button
         type="button"
         onClick={submit}
@@ -1115,7 +1137,7 @@ function MemberCovenantAlignment({
 function LeaderAlignmentSummary({
   responses,
 }: {
-  responses: Array<{ score: AlignmentScore; recordedAt: number }>;
+  responses: Array<{ score: AlignmentScore; comment?: string; recordedAt: number }>;
 }) {
   const count = responses.length;
 
@@ -1165,6 +1187,25 @@ function LeaderAlignmentSummary({
           );
         })}
       </div>
+
+      {responses.some((response) => response.comment?.trim()) && (
+        <div className="mt-5 border-t pt-4">
+          <p className="font-semibold">Anonymous member comments</p>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            Comments are shown without names, ratings, or timestamps. Members are warned not to include identifying details.
+          </p>
+          <div className="mt-3 space-y-2">
+            {responses
+              .map((response) => response.comment?.trim())
+              .filter((comment): comment is string => Boolean(comment))
+              .map((comment) => (
+                <blockquote key={comment} className="rounded-xl bg-secondary/55 px-4 py-3 text-sm leading-relaxed">
+                  {comment}
+                </blockquote>
+              ))}
+          </div>
+        </div>
+      )}
 
       <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
         The leader view never displays member names with ratings. This local-first prototype does not yet provide cryptographic anonymity across devices.
