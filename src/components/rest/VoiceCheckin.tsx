@@ -52,11 +52,11 @@ function errorMessage(error: unknown): string {
 }
 
 /**
- * Speak instead of tapping. What you say (understood on this device) becomes
- * a suggested battery reading, which a flat, quiet voice can pull lower. You
- * always confirm it; your own sense of it wins.
+ * Speak instead of tapping. What you say (understood on this device) sets the
+ * battery, and a flat, quiet voice can pull it lower. Tapping a battery
+ * afterwards overrides it; your own sense of it wins.
  */
-export function VoiceCheckin({ onUse }: { onUse: (level: number) => void }) {
+export function VoiceCheckin({ onLevel }: { onLevel: (level: number) => void }) {
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
   const [words, setWords] = useState<Words>(() =>
     !understandingSupported() ? { kind: 'unsupported' } : optedIn() ? { kind: 'loading' } : { kind: 'off' },
@@ -109,6 +109,8 @@ export function VoiceCheckin({ onUse }: { onUse: (level: number) => void }) {
 
       const reading = summarise(frames, positivity);
       setStatus(reading ? { kind: 'result', reading, heard } : { kind: 'quiet' });
+      // Check in just as if the matching battery had been tapped.
+      if (reading?.level) onLevel(reading.level);
     } catch (error) {
       setStatus({ kind: 'error', message: errorMessage(error) });
     }
@@ -145,7 +147,7 @@ export function VoiceCheckin({ onUse }: { onUse: (level: number) => void }) {
         )}
         {status.kind === 'error' && <p className="text-lg text-white/85">{status.message}</p>}
         {status.kind === 'result' && (
-          <Result reading={status.reading} heard={status.heard} words={words} onUse={onUse} onEnable={enableWords} />
+          <Result reading={status.reading} heard={status.heard} words={words} onEnable={enableWords} />
         )}
       </div>
     </div>
@@ -221,11 +223,10 @@ interface ResultProps {
   reading: VoiceReading;
   heard?: string;
   words: Words;
-  onUse: (level: number) => void;
   onEnable: () => void;
 }
 
-function Result({ reading, heard, words, onUse, onEnable }: ResultProps) {
+function Result({ reading, heard, words, onEnable }: ResultProps) {
   const { level, energy } = reading;
   const info = level ? ENERGY_LEVELS[level - 1] : undefined;
   const color = level ? LEVEL_COLOR[level] : 'bg-white/70';
@@ -262,12 +263,10 @@ function Result({ reading, heard, words, onUse, onEnable }: ResultProps) {
       </dl>
 
       {level && info ? (
-        <div className="flex flex-wrap items-center gap-3">
-          <button type="button" onClick={() => onUse(level)} className={cn(button, loud)}>
-            Check in as {info.short.toLowerCase()}
-          </button>
-          <p className="text-sm text-white/70">Not quite right? Tap the battery that feels true. You know best.</p>
-        </div>
+        <p className="text-base text-white/80">
+          Your battery is set to <span className="font-semibold text-white">{info.short.toLowerCase()}</span>. Not quite
+          right? Tap the battery that feels true. You know best.
+        </p>
       ) : (
         <div className="text-sm text-white/75">
           <EnableWords words={words} onEnable={onEnable} />

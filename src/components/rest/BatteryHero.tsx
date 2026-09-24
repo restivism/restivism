@@ -164,7 +164,7 @@ export function BatteryHero({ now }: { now: number }) {
           {reading ? reading.label : '\u00a0'}
         </p>
 
-        <VoiceCheckin onUse={handleLevel} />
+        <VoiceCheckin onLevel={handleLevel} />
       </div>
     </section>
   );
