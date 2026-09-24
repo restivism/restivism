@@ -18,6 +18,7 @@ import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 
 import { AppShell } from '@/components/rest/AppShell';
+import { BatteryGlyph } from '@/components/rest/BatteryControl';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { useOrganizationSync } from '@/hooks/useOrganizationSync';
 import { useRest } from '@/hooks/useRest';
@@ -90,6 +91,15 @@ export default function TeamRest() {
     (membership) => membership.id === directory.currentOrganizationId,
   );
 
+  const updateMembership = (organizationId: string, update: Partial<OrganizationMembership>) => {
+    setDirectory((previous) => ({
+      ...previous,
+      memberships: previous.memberships.map((membership) => (
+        membership.id === organizationId ? { ...membership, ...update } : membership
+      )),
+    }));
+  };
+
   const setCurrentOrganization = (organizationId: string) => {
     setDirectory((previous) => ({
       ...previous,
@@ -149,6 +159,7 @@ export default function TeamRest() {
           memberships={directory.memberships}
           requestedFocus={searchParams.get('focus')}
           onSelectOrganization={setCurrentOrganization}
+          onUpdateMembership={(update) => updateMembership(current.id, update)}
           onLeave={() => leaveOrganization(current.id)}
         />
       )}
@@ -453,12 +464,14 @@ function OrganizationWorkspace({
   memberships,
   requestedFocus,
   onSelectOrganization,
+  onUpdateMembership,
   onLeave,
 }: {
   membership: OrganizationMembership;
   memberships: OrganizationMembership[];
   requestedFocus: string | null;
   onSelectOrganization: (organizationId: string) => void;
+  onUpdateMembership: (update: Partial<OrganizationMembership>) => void;
   onLeave: () => void;
 }) {
   const storageKey = `restivism:organization:${membership.id}:rest`;
