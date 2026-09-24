@@ -480,23 +480,32 @@ function OrganizationWorkspace({
     return () => window.clearTimeout(id);
   }, [requestedFocus]);
 
-  const saveAgreement = () => {
+  const saveAgreement = async () => {
     if (membership.role !== 'leader') {
       setMessage('Only an organization leader can change the rest agreement.');
       return;
     }
 
-    setState((previous) => ({
-      ...previous,
-      agreement: {
-        ...agreementDraft,
-        note: agreementDraft.note.trim(),
-        revision: previous.agreement.revision + 1,
-        adoptedAt: Date.now(),
-      },
-    }));
-    setEditingAgreement(false);
-    setMessage('Rest agreement saved for this organization.');
+    const nextAgreement = {
+      ...agreementDraft,
+      note: agreementDraft.note.trim(),
+      revision: state.agreement.revision + 1,
+      adoptedAt: Date.now(),
+    };
+
+    try {
+      if (orgSync.canSync) await orgSync.publishCovenant(nextAgreement);
+      setState((previous) => ({ ...previous, agreement: nextAgreement }));
+      setAgreementDraft(nextAgreement);
+      setEditingAgreement(false);
+      setMessage(
+        orgSync.canSync
+          ? 'Covenant published to the organization.'
+          : 'Covenant saved only on this device. Create a new organization to enable shared sync.',
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not publish the covenant.');
+    }
   };
 
   const toggleAgreementPromise = (
@@ -570,31 +579,20 @@ function OrganizationWorkspace({
     }));
   };
 
-  const submitAlignment = (score: AlignmentScore, responseId: string, comment: string) => {
-    if (membership.role !== 'member' || state.agreement.revision === 0) return;
+  const submitAlignment = async (score: AlignmentScore, responseId: string, comment: string) => {
+    if (membership.role !== 'member' || effectiveAgreement.revision === 0) return;
 
-    setState((previous) => {
-      const responses = previous.alignmentResponses ?? [];
-      const response = {
-        id: responseId,
-        agreementRevision: previous.agreement.revision,
+    try {
+      await orgSync.publishAlignment(
+        effectiveAgreement.revision,
         score,
-        comment: comment.trim() || undefined,
-        recordedAt: Date.now(),
-      };
-
-      return {
-        ...previous,
-        alignmentResponses: [
-          ...responses.filter((item) => !(
-            item.id === responseId &&
-            item.agreementRevision === previous.agreement.revision
-          )),
-          response,
-        ],
-      };
-    });
-    setMessage('Your covenant alignment was recorded anonymously in the organization data.');
+        responseId,
+        comment,
+      );
+      setMessage('Your covenant alignment was shared anonymously with the organization.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not share covenant alignment.');
+    }
   };
 
   const recordPulse = (answer: PulseAnswer) => {
