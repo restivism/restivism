@@ -456,8 +456,8 @@ function OrganizationWorkspace({
     setState((previous) => ({
       ...previous,
       agreement: {
-        ...previous.agreement,
-        note: agreementNote.trim(),
+        ...agreementDraft,
+        note: agreementDraft.note.trim(),
         revision: previous.agreement.revision + 1,
         adoptedAt: Date.now(),
       },
@@ -469,12 +469,9 @@ function OrganizationWorkspace({
   const toggleAgreementPromise = (
     field: 'protectedRest' | 'acceptedCoverage' | 'pauseWhenFull',
   ) => {
-    setState((previous) => ({
+    setAgreementDraft((previous) => ({
       ...previous,
-      agreement: {
-        ...previous.agreement,
-        [field]: !previous.agreement[field],
-      },
+      [field]: !previous[field],
     }));
   };
 
@@ -563,7 +560,7 @@ function OrganizationWorkspace({
 
   const loadDemo = () => {
     setState(createDemoOrganizationRestState());
-    setAgreementNote('We protect rest without making someone else silently carry too much.');
+    setAgreementDraft(createDemoOrganizationRestState().agreement);
     setEditingAgreement(false);
     setMessage('Loaded fictional Cedar / Birch demo data for this organization.');
   };
@@ -655,19 +652,19 @@ function OrganizationWorkspace({
         {editingAgreement ? (
           <div className="mt-5 space-y-4">
             <AgreementPromise
-              checked={state.agreement.protectedRest}
+              checked={agreementDraft.protectedRest}
               onChange={() => toggleAgreementPromise('protectedRest')}
               title="Rest time is protected."
               detail="We do not quietly pull someone back into the work during agreed rest."
             />
             <AgreementPromise
-              checked={state.agreement.acceptedCoverage}
+              checked={agreementDraft.acceptedCoverage}
               onChange={() => toggleAgreementPromise('acceptedCoverage')}
               title="Coverage must be accepted."
               detail="Naming someone does not count as coverage until they agree."
             />
             <AgreementPromise
-              checked={state.agreement.pauseWhenFull}
+              checked={agreementDraft.pauseWhenFull}
               onChange={() => toggleAgreementPromise('pauseWhenFull')}
               title="If nobody has capacity, the work can wait."
               detail="We pause, reduce, or postpone nonessential work instead of overloading someone else."
@@ -697,7 +694,7 @@ function OrganizationWorkspace({
                 <button
                   type="button"
                   onClick={() => {
-                    setAgreementNote(state.agreement.note);
+                    setAgreementDraft(state.agreement);
                     setEditingAgreement(false);
                   }}
                   className="rounded-full px-4 py-2.5 font-semibold text-muted-foreground hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -718,7 +715,10 @@ function OrganizationWorkspace({
             <div className="flex flex-wrap items-center gap-3">
               <button
                 type="button"
-                onClick={() => setEditingAgreement(true)}
+                onClick={() => {
+                  setAgreementDraft(state.agreement);
+                  setEditingAgreement(true);
+                }}
                 className="rounded-full border px-4 py-2 text-sm font-bold hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 Edit agreement
