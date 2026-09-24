@@ -4,104 +4,138 @@
 
 Restivism is a rest companion for activists and organizers. It keeps the original
 personal loop — check your battery, get a recharge plan, rest, and check in again —
-and adds a small team layer so rest can be protected in practice rather than left
-as an individual intention.
+and adds a simple organization layer so rest can be protected by the group instead
+of depending on one person to push through.
 
 ## How it works
 
 ### My rest
 
 1. **Check in.** Set your battery from 1 (running on fumes) to 5 (fully charged).
-   The hero art and colors change to match.
-2. **Get a plan.** Each level has its own plan: one recharge to do first, two
-   alternatives if that one isn't possible right now, and three small care quests.
-3. **Recharge.** Start a timed play, sleep, or social session.
-4. **Check in again.** Report your battery after the session so you can see what
-   the rest did for you.
+2. **Get a plan.** Restivism recommends play, sleep, or social time plus a few small
+   acts of care.
+3. **Recharge.** Start a timed rest session.
+4. **Check in again.** See how your battery changed.
 
-### Team rest
+When a battery is low or middling, the plan can send the user directly to their
+organization's coverage area so the team can make room for the rest.
 
-The optional `/team` flow is deliberately simple:
+### Organization rest
 
-1. **Agree.** Write a short team agreement about protected rest and what happens
-   when nobody has capacity. Movement, secular, and faith framings are available.
-2. **Cover.** Use aliases by default, propose a bounded handoff, and require the
-   receiving person to explicitly accept it. If nobody can cover nonessential work,
-   pause it instead of silently returning it to the person who is resting.
-3. **Reflect.** Record one shared team answer to “Did our coverage plan hold?” or
-   choose not to record an answer.
+The optional `/team` area now begins with an organization gate.
 
-Handoffs are optional and intentionally minimal: current status, next bounded
-action, agreed limit, and an essential reference the receiver already has access to.
+**Organization leaders**:
+1. Create an organization.
+2. Choose their name or alias.
+3. Create a passcode.
+4. Share the generated invite code and the passcode separately.
+
+**Members**:
+1. Paste the organization invite code.
+2. Enter the leader-created passcode.
+3. Choose the name or alias they want to use.
+
+The passcode is not stored inside the invite code. The invite metadata is encrypted
+in the browser with a key derived from the passcode using PBKDF2-SHA-256 and
+AES-256-GCM.
+
+Once inside an organization, the experience is deliberately small:
+
+1. **Agree — Our rest agreement.** A simple covenant with three memorable promises:
+   rest time is protected; coverage only counts when accepted; and when nobody has
+   capacity, nonessential work can wait. Organizations may add one short sentence
+   in their own words.
+2. **Cover — Make room for the rest.** Record who is resting, what needs attention,
+   the day, and either who can cover or that the work should pause. A coverage
+   request stays **Waiting** until someone marks it accepted.
+3. **Reflect — Did our rest plan hold?** One shared organization answer:
+   **Yes / Partly / No**. This is not an individual wellness score.
+
+The coverage form has one optional handoff note instead of a multi-field handover.
+
+## Organization data boundaries
+
+Each organization gets a different local storage namespace:
+
+```
+restivism:organization:<organization-id>:rest
+```
+
+The UI only loads the current organization's agreement, coverage, and reflection.
+Switching organizations switches the visible data set.
+
+Organization membership is stored separately in `restivism:organizations`.
+Leaving an organization removes that membership from the app on that device; the
+invite + passcode are required to join it again.
+
+### Current prototype limitation
+
+The invite + passcode can be used to join the same organization identity on another
+device, but this branch does **not yet synchronize organization data between
+devices**. Agreements, coverage, and reflections are currently local-first browser
+data, not server-enforced authorization.
+
+That distinction is intentional for this iteration: the organization UX and data
+isolation model can be tested without publishing sensitive operational information
+to Nostr or inventing a weak shared-key sync scheme.
 
 ## Privacy
 
-Restivism has no analytics and the personal-rest state stays in browser
-`localStorage` under `restivism:state`.
-
-The team-rest layer is also local by default, stored separately under
-`restivism:team-rest`. Team agreements, aliases, coverage plans, handoffs, and
-the team pulse are **not published to Nostr**. Browser storage is not encrypted, so
-the UI recommends aliases and warns users not to store passwords, beneficiary
-identities, case histories, or precise sensitive locations.
-
-Clearing site data resets the app.
+- Personal rest state stays in browser `localStorage` under `restivism:state`.
+- Organization rest records are namespaced by organization ID.
+- Organization agreement, coverage, and reflection data are not published to Nostr.
+- There is no analytics, streak system, leaderboard, or individual performance
+  ranking.
+- Browser storage itself is not encrypted. Sensitive case details, passwords,
+  beneficiary identities, or precise sensitive locations should not be entered.
 
 ## Features
 
-- Battery check-in with level-matched artwork and a plan for each level
-- Session timer with wall-clock timing and screen wake lock where supported
-- Chime and Taps synthesized with Web Audio
-- Team agreement with revision tracking
-- Alias-first coverage planning
-- Explicit proposed → accepted coverage state
-- Overlap protection for accepted coverage assigned to the same alias
-- “Pause work” path when nobody has capacity
-- Optional minimal handoff notes
-- One shared team-level reflection, not individual mood or performance tracking
-- Fictional Cedar / Birch / Ash demo data for presentations
-- No streaks, points, badges, leaderboards, or individual wellness scoring
-- Syncs local state across open tabs
-- Respects `prefers-reduced-motion`; keyboard and screen-reader friendly
-- Installable as a web app via the manifest
+- Battery check-in with level-matched recharge plans
+- Timed play, sleep, and social rest sessions
+- Create or join an organization
+- Leader-created passcode + encrypted organization invite
+- Multiple organizations on one device with explicit organization switching
+- Simple three-promise rest agreement / covenant
+- Simple coverage request with **Waiting / Covered / Paused**
+- Explicit acceptance before coverage counts
+- Pause-work path when nobody has capacity
+- One optional handoff note
+- One organization-level reflection
+- Fictional Cedar / Birch demo data
+- No gamification or individual wellness scoring
+- Keyboard and screen-reader friendly
+- Installable web app
 
 ## Development
 
 Requires Node.js 22 or newer.
 
 ```sh
-npm run dev     # start the Vite dev server
-npm run build   # production build into dist/
-npm run test    # type check, lint, unit tests, and build
+npm run dev
+npm run build
+npm run test
 ```
 
-Run `npm run test` before committing; it must pass.
-
-### Stack
-
-React 19, TypeScript, Vite, Tailwind CSS 4, shadcn/ui on Radix, React Router, and
-TanStack Query. The project is built on [MKStack](https://soapbox.pub/mkstack), so
-Nostr plumbing (Nostrify, login, relay config) is present. The team-rest feature
-intentionally does not publish its sensitive operational data to Nostr.
+Run `npm run test` before merging.
 
 ### Layout
 
 ```
 src/
-├── lib/rest.ts                   # Personal recharge plans and state types
-├── lib/teamRest.ts               # Team agreement, coverage, pulse domain model
-├── components/RestProvider.tsx   # localStorage-backed personal state
-├── components/rest/              # Battery, plan, timer shell
+├── lib/rest.ts                  # Personal recharge plans and state
+├── lib/organization.ts          # Passcode-protected organization invites
+├── lib/teamRest.ts              # Simplified org agreement, coverage, reflection
+├── components/RestProvider.tsx
+├── components/rest/
 └── pages/
-    ├── Index.tsx                 # Personal check-in and recharge plan
-    ├── RestSession.tsx           # /rest/:practiceId timer flow
-    └── TeamRest.tsx              # /team Agree → Cover → Reflect flow
+    ├── Index.tsx
+    ├── RestSession.tsx
+    └── TeamRest.tsx             # Organization gate + organization rest workspace
 ```
 
 ## Deployment
 
 The build is a static site. Pushes to `main` deploy to GitHub Pages
-(`.github/workflows/deploy.yml`); `.gitlab-ci.yml` does the same for GitLab Pages.
-
-It is also published to Nostr as a named [nsite](https://nsyte.run), `restivism`,
-configured in `.nsite/config.json`.
+(`.github/workflows/deploy.yml`). It is also published to Nostr as the named
+nsite `restivism`.
