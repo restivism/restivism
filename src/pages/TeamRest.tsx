@@ -18,7 +18,10 @@ import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 
 import { AppShell } from '@/components/rest/AppShell';
+import { BatteryGlyph } from '@/components/rest/BatteryControl';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
+import { useOrganizationSync } from '@/hooks/useOrganizationSync';
+import { useRest } from '@/hooks/useRest';
 import {
   createOrganizationInvite,
   DEFAULT_ORGANIZATION_DIRECTORY,
@@ -30,6 +33,7 @@ import {
   agreementSummary,
   createDemoOrganizationRestState,
   DEFAULT_ORGANIZATION_REST_STATE,
+  type AlignmentScore,
   type CoverageItem,
   type OrganizationRestState,
   type PulseAnswer,
@@ -37,6 +41,14 @@ import {
 import { cn } from '@/lib/utils';
 
 const DIRECTORY_KEY = 'restivism:organizations';
+const ALIGNMENT_LEVELS: ReadonlyArray<{ score: AlignmentScore; emoji: string; label: string }> = [
+  { score: 1, emoji: '😟', label: 'Not aligned' },
+  { score: 2, emoji: '😕', label: 'Some concerns' },
+  { score: 3, emoji: '🤔', label: 'Unsure' },
+  { score: 4, emoji: '🙂', label: 'Mostly aligned' },
+  { score: 5, emoji: '🤝', label: 'Fully aligned' },
+];
+const ALIGNMENT_PRIVACY_THRESHOLD = 3;
 
 function localDateValue() {
   const now = new Date();
@@ -46,6 +58,21 @@ function localDateValue() {
 
 function sameName(a: string, b: string) {
   return a.trim().toLocaleLowerCase() === b.trim().toLocaleLowerCase();
+}
+
+function weekStartTimestamp(now = Date.now()) {
+  const date = new Date(now);
+  const daysSinceMonday = (date.getDay() + 6) % 7;
+  date.setHours(0, 0, 0, 0);
+  date.setDate(date.getDate() - daysSinceMonday);
+  return date.getTime();
+}
+
+function weekKey(now = Date.now()) {
+  const date = new Date(weekStartTimestamp(now));
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
 }
 
 export default function TeamRest() {
@@ -63,6 +90,15 @@ export default function TeamRest() {
   const current = directory.memberships.find(
     (membership) => membership.id === directory.currentOrganizationId,
   );
+
+  const updateMembership = (organizationId: string, update: Partial<OrganizationMembership>) => {
+    setDirectory((previous) => ({
+      ...previous,
+      memberships: previous.memberships.map((membership) => (
+        membership.id === organizationId ? { ...membership, ...update } : membership
+      )),
+    }));
+  };
 
   const setCurrentOrganization = (organizationId: string) => {
     setDirectory((previous) => ({
@@ -123,6 +159,7 @@ export default function TeamRest() {
           memberships={directory.memberships}
           requestedFocus={searchParams.get('focus')}
           onSelectOrganization={setCurrentOrganization}
+          onUpdateMembership={(update) => updateMembership(current.id, update)}
           onLeave={() => leaveOrganization(current.id)}
         />
       )}
@@ -144,6 +181,7 @@ function OrganizationGate({
   const [alias, setAlias] = useState('');
   const [passcode, setPasscode] = useState('');
   const [inviteCode, setInviteCode] = useState('');
+  const [batterySharing, setBatterySharing] = useState<'auto' | 'private' | ''>('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
 
@@ -172,10 +210,18 @@ function OrganizationGate({
         alias: person,
         role: 'leader',
         joinedAt: Date.now(),
+        syncKey: result.organization.syncKey,
+        leaderPubkey: result.organization.leaderPubkey,
+        leaderSecretKey: result.organization.leaderSecretKey,
+        memberSecretKey: result.organization.memberSecretKey,
         inviteCode: result.inviteCode,
       });
-    } catch {
-      setMessage('Could not create the organization on this device.');
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : 'Could not create the organization on this device.',
+      );
     } finally {
       setBusy(false);
     }
@@ -187,6 +233,10 @@ function OrganizationGate({
 
     if (!inviteCode.trim() || !person || !passcode) {
       setMessage('Paste the organization invite, enter the passcode, and choose your name or alias.');
+      return;
+    }
+    if (!batterySharing) {
+      setMessage('Choose whether your weekly battery should be shared anonymously with the organization.');
       return;
     }
 
@@ -201,6 +251,10 @@ function OrganizationGate({
         alias: person,
         role: 'member',
         joinedAt: Date.now(),
+        syncKey: organization.syncKey,
+        leaderPubkey: organization.leaderPubkey,
+        memberSecretKey: organization.memberSecretKey,
+        autoShareWeeklyBattery: batterySharing === 'auto',
       });
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not join that organization.');
@@ -282,7 +336,7 @@ function OrganizationGate({
           </button>
         </div>
 
-        {message && (
+      {message && (
           <p className="mt-4 rounded-xl border border-primary/20 bg-secondary/50 px-4 py-3 text-base" role="status">
             {message}
           </p>
@@ -391,6 +445,49 @@ function OrganizationGate({
               />
             </label>
 
+            <fieldset className="space-y-3">
+              <legend className="font-semibold">Weekly battery privacy</legend>
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                Choose once. You can change this later inside the organization.
+              </p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <label className={cn(
+                  'cursor-pointer rounded-xl border p-4 transition-colors',
+                  batterySharing === 'auto' ? 'border-primary bg-secondary' : 'hover:bg-secondary/60',
+                )}>
+                  <input
+                    type="radio"
+                    name="battery-sharing"
+                    value="auto"
+                    checked={batterySharing === 'auto'}
+                    onChange={() => setBatterySharing('auto')}
+                    className="sr-only"
+                  />
+                  <span className="block font-semibold">Share anonymously each week</span>
+                  <span className="mt-1 block text-sm leading-relaxed text-muted-foreground">
+                    Restivism automatically contributes your weekly average. Leaders never see your alias or individual history.
+                  </span>
+                </label>
+                <label className={cn(
+                  'cursor-pointer rounded-xl border p-4 transition-colors',
+                  batterySharing === 'private' ? 'border-primary bg-secondary' : 'hover:bg-secondary/60',
+                )}>
+                  <input
+                    type="radio"
+                    name="battery-sharing"
+                    value="private"
+                    checked={batterySharing === 'private'}
+                    onChange={() => setBatterySharing('private')}
+                    className="sr-only"
+                  />
+                  <span className="block font-semibold">Keep my battery private</span>
+                  <span className="mt-1 block text-sm leading-relaxed text-muted-foreground">
+                    Your personal battery stays only on this device and does not enter the organization metric.
+                  </span>
+                </label>
+              </div>
+            </fieldset>
+
             <button
               type="submit"
               disabled={busy}
@@ -404,8 +501,8 @@ function OrganizationGate({
       </section>
 
       <p className="px-2 text-sm leading-relaxed text-muted-foreground">
-        Prototype note: the invite + passcode controls organization membership, and each organization gets a separate local data space.
-        Ongoing cross-device synchronization is not enabled in this branch yet.
+        New organizations include encrypted shared-sync credentials inside the passcode-protected invite.
+        Covenant, anonymous alignment, and weekly restfulness can then move between browsers without exposing their plaintext to relays.
       </p>
     </div>
   );
@@ -416,12 +513,14 @@ function OrganizationWorkspace({
   memberships,
   requestedFocus,
   onSelectOrganization,
+  onUpdateMembership,
   onLeave,
 }: {
   membership: OrganizationMembership;
   memberships: OrganizationMembership[];
   requestedFocus: string | null;
   onSelectOrganization: (organizationId: string) => void;
+  onUpdateMembership: (update: Partial<OrganizationMembership>) => void;
   onLeave: () => void;
 }) {
   const storageKey = `restivism:organization:${membership.id}:rest`;
@@ -429,9 +528,24 @@ function OrganizationWorkspace({
     storageKey,
     DEFAULT_ORGANIZATION_REST_STATE,
   );
+  const orgSync = useOrganizationSync(membership);
+  const { state: personalRest } = useRest();
+  const effectiveAgreement = membership.role === 'leader'
+    ? state.agreement
+    : orgSync.covenant ?? state.agreement;
+  const currentWeekKey = weekKey();
+  const currentWeekStart = weekStartTimestamp();
+  const personalWeekCheckins = personalRest.checkins.filter((checkin) => checkin.at >= currentWeekStart);
+  const personalWeekAverage = personalWeekCheckins.length > 0
+    ? personalWeekCheckins.reduce((sum, checkin) => sum + checkin.level, 0) / personalWeekCheckins.length
+    : undefined;
+  const organizationWeek = orgSync.weeklyBattery.filter((item) => item.weekKey === currentWeekKey);
 
   const coverageRef = useRef<HTMLElement>(null);
-  const [editingAgreement, setEditingAgreement] = useState(state.agreement.revision === 0);
+  const lastAutoShareRef = useRef('');
+  const [editingAgreement, setEditingAgreement] = useState(
+    membership.role === 'leader' && state.agreement.revision === 0,
+  );
   const [agreementDraft, setAgreementDraft] = useState(state.agreement);
   const [restingPerson, setRestingPerson] = useState(membership.alias);
   const [work, setWork] = useState('');
@@ -451,23 +565,71 @@ function OrganizationWorkspace({
     return () => window.clearTimeout(id);
   }, [requestedFocus]);
 
-  const saveAgreement = () => {
-    setState((previous) => ({
-      ...previous,
-      agreement: {
-        ...agreementDraft,
-        note: agreementDraft.note.trim(),
-        revision: previous.agreement.revision + 1,
-        adoptedAt: Date.now(),
-      },
-    }));
-    setEditingAgreement(false);
-    setMessage('Rest agreement saved for this organization.');
+  useEffect(() => {
+    if (
+      membership.role !== 'member' ||
+      !membership.autoShareWeeklyBattery ||
+      !orgSync.canSync ||
+      personalWeekAverage === undefined ||
+      personalWeekCheckins.length === 0
+    ) {
+      return;
+    }
+
+    const signature = `${currentWeekKey}:${personalWeekAverage.toFixed(4)}:${personalWeekCheckins.length}`;
+    if (lastAutoShareRef.current === signature) return;
+    lastAutoShareRef.current = signature;
+
+    void orgSync.publishWeeklyBattery(
+      currentWeekKey,
+      personalWeekAverage,
+      personalWeekCheckins.length,
+    ).catch((error: unknown) => {
+      console.error('Failed to auto-share anonymous weekly restfulness', error);
+      lastAutoShareRef.current = '';
+    });
+  }, [
+    currentWeekKey,
+    membership.autoShareWeeklyBattery,
+    membership.role,
+    orgSync,
+    personalWeekAverage,
+    personalWeekCheckins.length,
+  ]);
+
+  const saveAgreement = async () => {
+    if (membership.role !== 'leader') {
+      setMessage('Only an organization leader can change the rest agreement.');
+      return;
+    }
+
+    const nextAgreement = {
+      ...agreementDraft,
+      note: agreementDraft.note.trim(),
+      revision: state.agreement.revision + 1,
+      adoptedAt: Date.now(),
+    };
+
+    try {
+      if (orgSync.canSync) await orgSync.publishCovenant(nextAgreement);
+      setState((previous) => ({ ...previous, agreement: nextAgreement }));
+      setAgreementDraft(nextAgreement);
+      setEditingAgreement(false);
+      setMessage(
+        orgSync.canSync
+          ? 'Covenant published to the organization.'
+          : 'Covenant saved only on this device. Create a new organization to enable shared sync.',
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not publish the covenant.');
+    }
   };
 
   const toggleAgreementPromise = (
     field: 'protectedRest' | 'acceptedCoverage' | 'pauseWhenFull',
   ) => {
+    if (membership.role !== 'leader') return;
+
     setAgreementDraft((previous) => ({
       ...previous,
       [field]: !previous[field],
@@ -532,6 +694,22 @@ function OrganizationWorkspace({
       ...previous,
       coverage: previous.coverage.filter((item) => item.id !== itemId),
     }));
+  };
+
+  const submitAlignment = async (score: AlignmentScore, responseId: string, comment: string) => {
+    if (membership.role !== 'member' || effectiveAgreement.revision === 0) return;
+
+    try {
+      await orgSync.publishAlignment(
+        effectiveAgreement.revision,
+        score,
+        responseId,
+        comment,
+      );
+      setMessage('Your covenant alignment was shared anonymously with the organization.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not share covenant alignment.');
+    }
   };
 
   const recordPulse = (answer: PulseAnswer) => {
@@ -629,6 +807,12 @@ function OrganizationWorkspace({
         )}
       </section>
 
+      {!orgSync.canSync && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
+          This organization uses the older local-only invite format. To test cross-browser sharing, create a new organization on this branch and have members join using its new invite.
+        </div>
+      )}
+
       {message && (
         <div className="rounded-xl border border-primary/20 bg-secondary/50 px-4 py-3 text-base" role="status">
           {message}
@@ -642,14 +826,21 @@ function OrganizationWorkspace({
           </span>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-bold uppercase tracking-widest text-muted-foreground">1 · Agree</p>
-            <h2 className="text-2xl font-semibold">Our rest agreement</h2>
+            <h2 className="text-2xl font-semibold">Our rest covenant</h2>
             <p className="text-base text-muted-foreground">
-              A simple covenant: three promises the team can actually remember.
+              Leaders steward the covenant. Members can say how aligned they feel without attaching their name.
             </p>
           </div>
         </div>
 
-        {editingAgreement ? (
+        {membership.role === 'member' && orgSync.canSync && orgSync.covenantStatus === 'pending' ? (
+          <div className="mt-5 rounded-xl border border-dashed px-5 py-6">
+            <p className="font-semibold">Checking for the published covenant…</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Shared organization data is being fetched and decrypted.
+            </p>
+          </div>
+        ) : membership.role === 'leader' && editingAgreement ? (
           <div className="mt-5 space-y-4">
             <AgreementPromise
               checked={agreementDraft.protectedRest}
@@ -671,7 +862,9 @@ function OrganizationWorkspace({
             />
 
             <label className="block space-y-2">
-              <span className="font-semibold">One sentence in your own words <span className="font-normal text-muted-foreground">(optional)</span></span>
+              <span className="font-semibold">
+                One sentence in your own words <span className="font-normal text-muted-foreground">(optional)</span>
+              </span>
               <input
                 value={agreementDraft.note}
                 onChange={(event) => setAgreementDraft((previous) => ({ ...previous, note: event.target.value }))}
@@ -688,7 +881,7 @@ function OrganizationWorkspace({
                 className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 font-semibold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <Check className="size-4" aria-hidden />
-                Save agreement
+                Publish covenant
               </button>
               {state.agreement.revision > 0 && (
                 <button
@@ -704,33 +897,80 @@ function OrganizationWorkspace({
               )}
             </div>
           </div>
+        ) : effectiveAgreement.revision === 0 ? (
+          <div className="mt-5 rounded-xl border border-dashed px-5 py-6">
+            <p className="font-semibold">The covenant has not been published yet.</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {membership.role === 'leader'
+                ? 'Create the first covenant so members have something concrete to align around.'
+                : 'An organization leader needs to publish the covenant first.'}
+            </p>
+            {membership.role === 'leader' && (
+              <button
+                type="button"
+                onClick={() => setEditingAgreement(true)}
+                className="mt-4 rounded-full bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                Create covenant
+              </button>
+            )}
+          </div>
         ) : (
           <div className="mt-5 space-y-4">
             <div className="rounded-xl bg-secondary/55 p-4">
-              <p className="font-semibold">{agreementSummary(state.agreement)}</p>
-              {state.agreement.note && (
-                <p className="mt-2 text-base text-muted-foreground">“{state.agreement.note}”</p>
+              <p className="font-semibold">{agreementSummary(effectiveAgreement)}</p>
+              {effectiveAgreement.note && (
+                <p className="mt-2 text-base text-muted-foreground">“{effectiveAgreement.note}”</p>
               )}
             </div>
+
             <div className="flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setAgreementDraft(state.agreement);
-                  setEditingAgreement(true);
-                }}
-                className="rounded-full border px-4 py-2 text-sm font-bold hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                Edit agreement
-              </button>
+              {membership.role === 'leader' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAgreementDraft(state.agreement);
+                    setEditingAgreement(true);
+                  }}
+                  className="rounded-full border px-4 py-2 text-sm font-bold hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  Edit covenant
+                </button>
+              )}
               <span className="text-sm text-muted-foreground">
-                Revision {state.agreement.revision}
-                {state.agreement.adoptedAt ? ` · ${new Date(state.agreement.adoptedAt).toLocaleDateString()}` : ''}
+                Revision {effectiveAgreement.revision}
+                {effectiveAgreement.adoptedAt ? ` · ${new Date(effectiveAgreement.adoptedAt).toLocaleDateString()}` : ''}
               </span>
             </div>
+
+            {membership.role === 'member' ? (
+              <MemberCovenantAlignment
+                key={effectiveAgreement.revision}
+                organizationId={membership.id}
+                membershipJoinedAt={membership.joinedAt}
+                revision={effectiveAgreement.revision}
+                onSubmit={submitAlignment}
+              />
+            ) : (
+              <LeaderAlignmentSummary
+                responses={orgSync.alignmentResponses.filter(
+                  (response) => response.agreementRevision === effectiveAgreement.revision,
+                )}
+              />
+            )}
           </div>
         )}
       </section>
+
+      <WeeklyRestfulnessCard
+        role={membership.role}
+        canSync={orgSync.canSync}
+        autoShare={membership.autoShareWeeklyBattery ?? false}
+        personalAverage={personalWeekAverage}
+        personalSamples={personalWeekCheckins.length}
+        submissions={organizationWeek}
+        onAutoShareChange={(enabled) => onUpdateMembership({ autoShareWeeklyBattery: enabled })}
+      />
 
       <section ref={coverageRef} className="scroll-mt-24 rounded-2xl border bg-card p-5 shadow-sm sm:p-7">
         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -925,7 +1165,7 @@ function OrganizationWorkspace({
         )}
       </section>
 
-      {state.agreement.revision === 0 && state.coverage.length === 0 && (
+      {membership.role === 'leader' && state.agreement.revision === 0 && state.coverage.length === 0 && (
         <button
           type="button"
           onClick={loadDemo}
@@ -955,6 +1195,312 @@ function OrganizationWorkspace({
       <p className="text-sm leading-relaxed text-muted-foreground">
         Organization data is separated by organization ID in this browser. This branch does not yet synchronize agreements,
         coverage, or reflections between devices, so it should be treated as a local-first prototype rather than server-enforced authorization.
+      </p>
+    </div>
+  );
+}
+
+function WeeklyRestfulnessCard({
+  role,
+  canSync,
+  autoShare,
+  personalAverage,
+  personalSamples,
+  submissions,
+  onAutoShareChange,
+}: {
+  role: 'leader' | 'member';
+  canSync: boolean;
+  autoShare: boolean;
+  personalAverage?: number;
+  personalSamples: number;
+  submissions: Array<{ average: number; samples: number }>;
+  onAutoShareChange: (enabled: boolean) => void;
+}) {
+  const privacyThreshold = 3;
+  const organizationAverage = submissions.length > 0
+    ? submissions.reduce((sum, item) => sum + item.average, 0) / submissions.length
+    : undefined;
+  const averageLevel = organizationAverage === undefined
+    ? undefined
+    : Math.max(1, Math.min(5, Math.round(organizationAverage)));
+
+  return (
+    <section className="rounded-2xl border bg-card p-5 shadow-sm sm:p-7">
+      <div className="flex items-start gap-3">
+        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-secondary text-primary">
+          <UsersRound className="size-5" aria-hidden />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Weekly pulse</p>
+          <h2 className="text-2xl font-semibold">Organization restfulness</h2>
+          <p className="text-base text-muted-foreground">
+            A weekly 1–5 organization signal built from anonymous member battery averages.
+          </p>
+        </div>
+      </div>
+
+      {role === 'member' && (
+        <div className="mt-5 rounded-xl bg-secondary/50 p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="font-semibold">Your week</p>
+              {personalAverage === undefined ? (
+                <p className="mt-1 text-sm text-muted-foreground">
+                  No battery check-ins yet this week.
+                </p>
+              ) : (
+                <div className="mt-2 flex items-center gap-3">
+                  <BatteryGlyph level={Math.round(personalAverage)} size="md" />
+                  <p className="text-sm text-muted-foreground">
+                    Private average: <strong className="text-foreground">{personalAverage.toFixed(1)} / 5</strong>
+                    {' '}from {personalSamples} check-in{personalSamples === 1 ? '' : 's'}.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border bg-background/70 p-3">
+            <input
+              type="checkbox"
+              checked={autoShare}
+              disabled={!canSync}
+              onChange={(event) => onAutoShareChange(event.target.checked)}
+              className="mt-1 size-4 accent-primary"
+            />
+            <span>
+              <span className="block font-semibold">Automatically include my weekly battery anonymously</span>
+              <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
+                When enabled, new battery check-ins automatically refresh your one anonymous weekly contribution.
+                Leaders do not see your alias or individual check-in history.
+              </span>
+            </span>
+          </label>
+        </div>
+      )}
+
+      {role === 'leader' && (
+        <div className="mt-5 border-t pt-5">
+          <p className="font-semibold">Leadership dashboard · This week</p>
+          {submissions.length < privacyThreshold || organizationAverage === undefined || averageLevel === undefined ? (
+            <p className="mt-1 text-sm text-muted-foreground">
+              {submissions.length} anonymous contributor{submissions.length === 1 ? '' : 's'} so far.
+              {' '}The organization metric appears after at least {privacyThreshold} contributors.
+            </p>
+          ) : (
+            <div className="mt-4 space-y-5">
+              <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-secondary/45 p-4">
+                <div className="flex items-center gap-4">
+                  <BatteryGlyph level={averageLevel} size="lg" />
+                  <div>
+                    <p className="font-display text-4xl font-semibold">{organizationAverage.toFixed(1)} / 5</p>
+                    <p className="text-sm text-muted-foreground">
+                      Weekly restfulness · {submissions.length} anonymous contributors
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <p className="mb-3 text-sm font-semibold">Battery distribution</p>
+                <div className="grid grid-cols-5 gap-2" aria-label="Anonymous weekly battery distribution">
+                  {[1, 2, 3, 4, 5].map((level) => {
+                    const count = submissions.filter((item) => Math.round(item.average) === level).length;
+                    return (
+                      <div key={level} className="rounded-xl border bg-background/60 p-2 text-center">
+                        <BatteryGlyph level={level} size="md" className="mx-auto" />
+                        <p className="mt-2 text-xs font-semibold">{level} / 5</p>
+                        <p className="text-xs text-muted-foreground">
+                          {count} member{count === 1 ? '' : 's'}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+          <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
+            Each contributor counts once through their current weekly average. The dashboard does not display member aliases or individual battery histories.
+          </p>
+        </div>
+      )}
+
+      {!canSync && (
+        <p className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
+          This organization was created before shared sync was added. Create a new organization with a new invite to use cross-device covenant and weekly metrics.
+        </p>
+      )}
+    </section>
+  );
+}
+
+function MemberCovenantAlignment({
+  organizationId,
+  membershipJoinedAt,
+  revision,
+  onSubmit,
+}: {
+  organizationId: string;
+  membershipJoinedAt: number;
+  revision: number;
+  onSubmit: (score: AlignmentScore, responseId: string, comment: string) => void;
+}) {
+  const storagePrefix = `restivism:alignment:${organizationId}:${membershipJoinedAt}:r${revision}`;
+  const [savedScore, setSavedScore] = useLocalStorage<number>(`${storagePrefix}:score`, 0);
+  const [savedComment, setSavedComment] = useLocalStorage<string>(`${storagePrefix}:comment`, '');
+  const [responseId, setResponseId] = useLocalStorage<string>(`${storagePrefix}:id`, crypto.randomUUID());
+  const [draftScore, setDraftScore] = useState<AlignmentScore>(
+    savedScore >= 1 && savedScore <= 5 ? savedScore as AlignmentScore : 3,
+  );
+  const [draftComment, setDraftComment] = useState(savedComment);
+
+  const selected = ALIGNMENT_LEVELS.find((level) => level.score === draftScore) ?? ALIGNMENT_LEVELS[2];
+
+  const submit = () => {
+    const cleanedComment = draftComment.trim().slice(0, 500);
+    setSavedScore(draftScore);
+    setSavedComment(cleanedComment);
+    setResponseId(responseId);
+    onSubmit(draftScore, responseId, cleanedComment);
+  };
+
+  return (
+    <div className="rounded-2xl border bg-background/60 p-4 sm:p-5">
+      <div className="space-y-1">
+        <p className="font-semibold">How aligned do you feel with this covenant?</p>
+        <p className="text-sm text-muted-foreground">
+          Your name or alias is not stored with this response. You can update it anytime while this revision is current.
+        </p>
+      </div>
+
+      <div className="mt-5 text-center" aria-live="polite">
+        <div className="text-5xl" aria-hidden>{selected.emoji}</div>
+        <p className="mt-2 font-semibold">{selected.label}</p>
+      </div>
+
+      <label className="mt-5 block">
+        <span className="sr-only">Covenant alignment from 1 to 5</span>
+        <input
+          type="range"
+          min="1"
+          max="5"
+          step="1"
+          value={draftScore}
+          onChange={(event) => setDraftScore(Number(event.target.value) as AlignmentScore)}
+          className="w-full accent-primary"
+          aria-valuetext={selected.label}
+        />
+      </label>
+
+      <div className="mt-1 flex justify-between text-xl" aria-hidden>
+        {ALIGNMENT_LEVELS.map((level) => <span key={level.score}>{level.emoji}</span>)}
+      </div>
+
+      <label className="mt-5 block space-y-2">
+        <span className="font-semibold">
+          Anything you want leaders to understand? <span className="font-normal text-muted-foreground">(optional)</span>
+        </span>
+        <textarea
+          value={draftComment}
+          onChange={(event) => setDraftComment(event.target.value)}
+          rows={4}
+          maxLength={500}
+          placeholder="What feels supportive, unclear, unrealistic, or missing?"
+          className="w-full rounded-xl border bg-background px-4 py-3 text-base leading-relaxed outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        />
+        <span className="block text-xs leading-relaxed text-muted-foreground">
+          This is shown without your name or rating. Avoid including details that could identify you or someone else.
+        </span>
+      </label>
+
+      <button
+        type="button"
+        onClick={submit}
+        className="mt-5 rounded-full bg-primary px-5 py-2.5 font-semibold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        {savedScore ? 'Update my anonymous response' : 'Share anonymously'}
+      </button>
+    </div>
+  );
+}
+
+function LeaderAlignmentSummary({
+  responses,
+}: {
+  responses: Array<{ score: AlignmentScore; comment?: string; recordedAt: number }>;
+}) {
+  const count = responses.length;
+
+  if (count < ALIGNMENT_PRIVACY_THRESHOLD) {
+    return (
+      <div className="rounded-2xl border border-dashed p-4">
+        <p className="font-semibold">Anonymous covenant alignment</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {count === 0 ? 'No member responses yet.' : `${count} anonymous response${count === 1 ? '' : 's'} received.`}
+          {' '}Results appear after at least {ALIGNMENT_PRIVACY_THRESHOLD} responses to reduce the chance of identifying an individual response.
+        </p>
+      </div>
+    );
+  }
+
+  const average = responses.reduce((sum, response) => sum + response.score, 0) / count;
+  const rounded = Math.max(1, Math.min(5, Math.round(average))) as AlignmentScore;
+  const summary = ALIGNMENT_LEVELS.find((level) => level.score === rounded) ?? ALIGNMENT_LEVELS[2];
+
+  return (
+    <div className="rounded-2xl border bg-background/60 p-4 sm:p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="font-semibold">Anonymous covenant alignment</p>
+          <p className="text-sm text-muted-foreground">{count} responses · current revision only</p>
+        </div>
+        <div className="text-right">
+          <span className="text-3xl" aria-hidden>{summary.emoji}</span>
+          <p className="text-sm font-semibold">{average.toFixed(1)} / 5</p>
+        </div>
+      </div>
+
+      <div className="mt-4 space-y-2">
+        {ALIGNMENT_LEVELS.map((level) => {
+          const levelCount = responses.filter((response) => response.score === level.score).length;
+          const percent = Math.round((levelCount / count) * 100);
+
+          return (
+            <div key={level.score} className="grid grid-cols-[2rem_1fr_3rem] items-center gap-2 text-sm">
+              <span aria-hidden>{level.emoji}</span>
+              <div className="h-2 overflow-hidden rounded-full bg-secondary">
+                <div className="h-full rounded-full bg-primary" style={{ width: `${percent}%` }} />
+              </div>
+              <span className="text-right text-muted-foreground">{percent}%</span>
+              <span className="sr-only">{level.label}: {levelCount} responses</span>
+            </div>
+          );
+        })}
+      </div>
+
+      {responses.some((response) => response.comment?.trim()) && (
+        <div className="mt-5 border-t pt-4">
+          <p className="font-semibold">Anonymous member comments</p>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            Comments are shown without names, ratings, or timestamps. Members are warned not to include identifying details.
+          </p>
+          <div className="mt-3 space-y-2">
+            {responses
+              .map((response) => response.comment?.trim())
+              .filter((comment): comment is string => Boolean(comment))
+              .map((comment, index) => (
+                <blockquote key={`${index}:${comment}`} className="rounded-xl bg-secondary/55 px-4 py-3 text-sm leading-relaxed">
+                  {comment}
+                </blockquote>
+              ))}
+          </div>
+        </div>
+      )}
+
+      <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
+        The leader view never displays member names with ratings. This local-first prototype does not yet provide cryptographic anonymity across devices.
       </p>
     </div>
   );
