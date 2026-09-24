@@ -20,6 +20,32 @@ of depending on one person to push through.
 When a battery is low or middling, the plan can send the user directly to their
 organization's coverage area so the team can make room for the rest.
 
+### The rest itself
+
+- **You charge while you rest.** The timer is a tall battery that fills with rippling
+  liquid as the session runs, with a glow that breathes at ten seconds a breath.
+- **Every recharge has its own world.** Sleep is a starry night with a crescent moon
+  and the occasional shooting star; play is drifting shapes of color; social time
+  is warm, flickering lanterns. They are drawn live on a canvas, and hold still for
+  anyone who prefers reduced motion.
+- **Every recharge has its own sound.** Soft surf and a low drone for sleep, a
+  wandering music box for play, slow warm chords for social time. It is all
+  synthesized in the browser with the Web Audio API, so nothing is downloaded, and
+  the speaker button turns it off.
+- **Charging up is celebrated.** After the check-in, new bars pop into the battery
+  with a burst of sparks and a rising arpeggio.
+- **Rest out loud.** "Share your recharge" renders a portrait card (before → after,
+  bars gained, *Rest is resistance.*) that can go straight to the share sheet or be
+  saved as an image.
+- **A rest record.** Once there is a session, the home page shows minutes of rest
+  reclaimed, bars regained, the current rest streak, and the battery reading by
+  reading.
+
+### Demo mode
+
+Add `?demo` to any session URL, e.g. `/rest/sleep?m=20&demo`, and each minute
+passes in one second, so the whole loop fits into a live pitch.
+
 ### Organization rest
 
 The optional `/team` area now begins with an organization gate.
