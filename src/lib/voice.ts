@@ -14,7 +14,9 @@ import type { WordReading } from './words';
  * - Emphasis: how often the voice punches above its own baseline, per second.
  * - Presence: how much of the recording was spent speaking.
  *
- * When mood words were heard (see `words.ts`), they count for half.
+ * When mood words were heard (see `words.ts`), they count for half, except
+ * that negative words set a ceiling: a loud, emphatic "I want to quit" is
+ * distress, not charge, and saying so outranks how it sounded.
  */
 
 /** One analysis frame. `pitch` is undefined when the frame is not voiced. */
@@ -140,7 +142,8 @@ export function summarise(frames: VoiceFrame[], words?: WordReading): VoiceReadi
     presence: scale(presence, 0.2, 0.7),
   };
   const sound = 0.3 * scores.loudness + 0.3 * scores.tone + 0.25 * scores.emphasis + 0.15 * scores.presence;
-  const energy = Math.round(100 * (words?.score === undefined ? sound : (sound + words.score) / 2));
+  const said = words?.score;
+  const energy = Math.round(100 * (said === undefined ? sound : said < 0.5 ? Math.min(sound, said) : (sound + said) / 2));
   const level = Math.min(5, 1 + Math.floor(energy / 20));
 
   return { voicedSeconds, loudnessDb, pitchSpreadSemitones, emphasisPerSecond, presence, scores, words, energy, level };

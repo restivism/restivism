@@ -22,6 +22,9 @@ const NEGATIVE = [
   'tired', 'drained', 'depleted', "i'm done", 'so done', "can't do this", "can't anymore",
   "can't keep going", 'hopeless', 'overwhelmed', 'numb', 'empty', 'broken', 'falling apart',
   "can't sleep", 'stressed', 'anxious', 'sad', 'depressed', 'worthless', 'alone', 'miserable',
+  // Hopelessness and isolation.
+  "don't see the point", 'no point', "what's the point", 'pointless', 'lonely', 'isolated',
+  "haven't seen my family", "haven't seen my friends", 'miss my family', 'nobody cares', 'no one cares',
 ];
 
 const POSITIVE = [

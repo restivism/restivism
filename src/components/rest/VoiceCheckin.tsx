@@ -225,6 +225,11 @@ function Result({ reading, onUse }: { reading: VoiceReading; onUse: (level: numb
         </button>
         <p className="text-sm text-white/70">Not quite right? Tap the battery that feels true. You know best.</p>
       </div>
+      {!words && (
+        <p className="text-sm text-white/70">
+          Only your tone was measured, not your words. An upset or agitated voice can sound like high energy.
+        </p>
+      )}
     </div>
   );
 }
