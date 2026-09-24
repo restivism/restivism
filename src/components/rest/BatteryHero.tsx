@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 import { ENERGY_LEVELS, type EnergyCheckin, LEVEL_COLOR, recentCheckin, type RestSession } from '@/lib/rest';
 import { cn } from '@/lib/utils';
 import { useRest } from '@/hooks/useRest';
@@ -32,6 +34,47 @@ function subtitle(current: EnergyCheckin | undefined, latest: EnergyCheckin | un
   return `Checked in ${timeAgo(current.at, now)}. Tap again whenever it changes.`;
 }
 
+/** A protest scene per battery level, from exhausted and scattered to jubilant. */
+const BACKDROPS: Record<number, string> = {
+  1: '/battery-1.webp',
+  2: '/battery-2.webp',
+  3: '/battery-3.webp',
+  4: '/battery-4.webp',
+  5: '/battery-5.webp',
+};
+
+/**
+ * Crossfades between backdrops as the reading changes. Scenes are only
+ * mounted once they have been shown, so we never download all five up front.
+ */
+function HeroBackdrop({ level }: { level?: number }) {
+  const [seen, setSeen] = useState<number[]>(level ? [level] : []);
+  const [loaded, setLoaded] = useState<number[]>([]);
+  if (level && !seen.includes(level)) setSeen([...seen, level]);
+
+  return (
+    <div className="absolute inset-0 -z-10" aria-hidden>
+      <img
+        src="/dusk.webp"
+        alt=""
+        className="absolute inset-0 h-full w-full object-cover object-[center_70%]"
+      />
+      {seen.map((l) => (
+        <img
+          key={l}
+          src={BACKDROPS[l]}
+          alt=""
+          onLoad={() => setLoaded((prev) => [...prev, l])}
+          className={cn(
+            'absolute inset-0 h-full w-full object-cover transition-opacity duration-700 motion-reduce:transition-none',
+            l === level && loaded.includes(l) ? 'opacity-100' : 'opacity-0',
+          )}
+        />
+      ))}
+    </div>
+  );
+}
+
 interface BatteryHeroProps {
   now: number;
   onCheckIn?: (level: number) => void;
@@ -47,7 +90,7 @@ export function BatteryHero({ now, onCheckIn }: BatteryHeroProps) {
 
   return (
     <section aria-labelledby="battery-heading" className="relative isolate overflow-hidden">
-      <img src="/dusk.webp" alt="" className="absolute inset-0 -z-10 h-full w-full object-cover object-[center_70%]" />
+      <HeroBackdrop level={current?.level} />
       <div className="absolute inset-0 -z-10 bg-gradient-to-b from-[hsl(250_45%_10%/0.45)] via-[hsl(250_45%_10%/0.55)] to-background" />
       {current && (
         <div
