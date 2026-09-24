@@ -674,8 +674,8 @@ function OrganizationWorkspace({
             <label className="block space-y-2">
               <span className="font-semibold">One sentence in your own words <span className="font-normal text-muted-foreground">(optional)</span></span>
               <input
-                value={agreementNote}
-                onChange={(event) => setAgreementNote(event.target.value)}
+                value={agreementDraft.note}
+                onChange={(event) => setAgreementDraft((previous) => ({ ...previous, note: event.target.value }))}
                 maxLength={240}
                 placeholder="What do we want to remember when things get busy?"
                 className="w-full rounded-xl border bg-background px-4 py-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring"
