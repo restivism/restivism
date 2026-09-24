@@ -41,10 +41,10 @@ AES-256-GCM.
 
 Once inside an organization, the experience is deliberately small:
 
-1. **Agree — Our rest agreement.** A simple covenant with three memorable promises:
-   rest time is protected; coverage only counts when accepted; and when nobody has
-   capacity, nonessential work can wait. Organizations may add one short sentence
-   in their own words.
+1. **Agree — Our rest covenant.** Organization leaders create and revise the
+   covenant. Members see it read-only and can submit a 1–5 emoji alignment response
+   without attaching their name or alias. Leader results stay hidden until at least
+   three responses exist for the current covenant revision.
 2. **Cover — Make room for the rest.** Record who is resting, what needs attention,
    the day, and either who can cover or that the work should pause. A coverage
    request stays **Waiting** until someone marks it accepted.
@@ -72,8 +72,10 @@ invite + passcode are required to join it again.
 
 The invite + passcode can be used to join the same organization identity on another
 device, but this branch does **not yet synchronize organization data between
-devices**. Agreements, coverage, and reflections are currently local-first browser
-data, not server-enforced authorization.
+devices**. Covenants, anonymous alignment responses, coverage, and reflections are
+currently local-first browser data, not server-enforced authorization. The
+leader/member permissions and anonymous aggregate are therefore the intended UX and
+data model, not yet a complete cross-device authorization system.
 
 That distinction is intentional for this iteration: the organization UX and data
 isolation model can be tested without publishing sensitive operational information
@@ -96,7 +98,9 @@ to Nostr or inventing a weak shared-key sync scheme.
 - Create or join an organization
 - Leader-created passcode + encrypted organization invite
 - Multiple organizations on one device with explicit organization switching
-- Simple three-promise rest agreement / covenant
+- Leader-owned three-promise rest covenant
+- Anonymous-to-the-UI member alignment slider with emoji feedback
+- Minimum 3-response threshold before leaders see covenant alignment results
 - Simple coverage request with **Waiting / Covered / Paused**
 - Explicit acceptance before coverage counts
 - Pause-work path when nobody has capacity
