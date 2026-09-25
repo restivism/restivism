@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Skeleton } from '@/components/ui/skeleton';
 import { type RechargeCard, renderRechargeCard } from '@/lib/shareCard';
 
-const FILE_NAME = 'restivism-recharge.png';
+const FILE_NAME = 'restivist-recharge.png';
 
 /** Render the card while mounted and hand back a file plus a preview URL. */
 function useCard(card: RechargeCard) {

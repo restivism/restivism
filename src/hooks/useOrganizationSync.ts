@@ -131,15 +131,15 @@ async function decryptPayload(syncKey: string, content: string): Promise<SharedP
 }
 
 function organizationTag(organizationId: string) {
-  return `restivism-org-${organizationId}`;
+  return `restivist-org-${organizationId}`;
 }
 
 function covenantD(organizationId: string) {
-  return `restivism:${organizationId}:covenant`;
+  return `restivist:${organizationId}:covenant`;
 }
 
 function batteryD(organizationId: string, weekKey: string) {
-  return `restivism:${organizationId}:battery:${weekKey}`;
+  return `restivist:${organizationId}:battery:${weekKey}`;
 }
 
 function newestByResponse(items: SyncedAlignment[]) {
@@ -157,7 +157,7 @@ export function useOrganizationSync(membership: OrganizationMembership) {
   const tag = organizationTag(membership.id);
 
   const covenantQuery = useQuery({
-    queryKey: ['restivism-org-covenant', membership.id, membership.leaderPubkey],
+    queryKey: ['restivist-org-covenant', membership.id, membership.leaderPubkey],
     enabled,
     refetchInterval: 5_000,
     queryFn: async ({ signal }) => {
@@ -179,7 +179,7 @@ export function useOrganizationSync(membership: OrganizationMembership) {
   });
 
   const alignmentQuery = useQuery({
-    queryKey: ['restivism-org-alignment', membership.id],
+    queryKey: ['restivist-org-alignment', membership.id],
     enabled: enabled && membership.role === 'leader',
     refetchInterval: 5_000,
     queryFn: async ({ signal }) => {
@@ -207,7 +207,7 @@ export function useOrganizationSync(membership: OrganizationMembership) {
   });
 
   const weeklyBatteryQuery = useQuery({
-    queryKey: ['restivism-org-weekly-battery', membership.id],
+    queryKey: ['restivist-org-weekly-battery', membership.id],
     enabled: enabled && membership.role === 'leader',
     refetchInterval: 10_000,
     queryFn: async ({ signal }) => {

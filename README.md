@@ -92,13 +92,13 @@ The coverage form has one optional handoff note instead of a multi-field handove
 Each organization gets a different local storage namespace:
 
 ```
-restivism:organization:<organization-id>:rest
+restivist:organization:<organization-id>:rest
 ```
 
 The UI only loads the current organization's agreement, coverage, and reflection.
 Switching organizations switches the visible data set.
 
-Organization membership is stored separately in `restivism:organizations`.
+Organization membership is stored separately in `restivist:organizations`.
 Leaving an organization removes that membership from the app on that device; the
 invite + passcode are required to join it again.
 
@@ -122,7 +122,7 @@ to Nostr or inventing a weak shared-key sync scheme.
 
 ## Privacy
 
-- Personal rest state stays in browser `localStorage` under `restivism:state`.
+- Personal rest state stays in browser `localStorage` under `restivist:state`.
 - Voice check-ins are analysed in the browser. Audio is held in memory for the
   check-in only, never stored or sent. Word understanding uses Whisper tiny.en
   and a DistilBERT sentiment model via transformers.js in a Web Worker; the
@@ -197,7 +197,7 @@ src/
 
 The build is a static site. Pushes to `main` deploy to GitHub Pages
 (`.github/workflows/deploy.yml`). It is also published to Nostr as the named
-nsite `restivism`.
+nsite `restivist`.
 
 ## Shared organization sync
 

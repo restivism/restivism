@@ -40,7 +40,7 @@ import {
 } from '@/lib/teamRest';
 import { cn } from '@/lib/utils';
 
-const DIRECTORY_KEY = 'restivism:organizations';
+const DIRECTORY_KEY = 'restivist:organizations';
 const ALIGNMENT_LEVELS: ReadonlyArray<{ score: AlignmentScore; emoji: string; label: string }> = [
   { score: 1, emoji: '😟', label: 'Not aligned' },
   { score: 2, emoji: '😕', label: 'Some concerns' },
@@ -519,7 +519,7 @@ function OrganizationWorkspace({
   onUpdateMembership: (update: Partial<OrganizationMembership>) => void;
   onLeave: () => void;
 }) {
-  const storageKey = `restivism:organization:${membership.id}:rest`;
+  const storageKey = `restivist:organization:${membership.id}:rest`;
   const [state, setState] = useLocalStorage<OrganizationRestState>(
     storageKey,
     DEFAULT_ORGANIZATION_REST_STATE,
@@ -1366,7 +1366,7 @@ function MemberCovenantAlignment({
   revision: number;
   onSubmit: (score: AlignmentScore, responseId: string, comment: string) => void;
 }) {
-  const storagePrefix = `restivism:alignment:${organizationId}:${membershipJoinedAt}:r${revision}`;
+  const storagePrefix = `restivist:alignment:${organizationId}:${membershipJoinedAt}:r${revision}`;
   const [savedScore, setSavedScore] = useLocalStorage<number>(`${storagePrefix}:score`, 0);
   const [savedComment, setSavedComment] = useLocalStorage<string>(`${storagePrefix}:comment`, '');
   const [responseId, setResponseId] = useLocalStorage<string>(`${storagePrefix}:id`, crypto.randomUUID());

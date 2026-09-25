@@ -20,7 +20,7 @@ export interface Understanding {
 }
 
 /** Remembers that the models were downloaded, so we can load them from cache without asking again. */
-const OPTED_IN_KEY = 'restivism:voice-words';
+const OPTED_IN_KEY = 'restivist:voice-words';
 /** Whisper expects 16 kHz mono. */
 const SAMPLE_RATE = 16_000;
 

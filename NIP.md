@@ -15,7 +15,7 @@ Each organization has:
 Relay-visible organization grouping uses:
 
 ```
-["t", "restivism-org-<organization-id>"]
+["t", "restivist-org-<organization-id>"]
 ```
 
 The UUID is random and does not contain the organization name.
@@ -34,8 +34,8 @@ leader pubkey.
 Tags:
 
 ```
-["d", "restivism:<organization-id>:covenant"]
-["t", "restivism-org-<organization-id>"]
+["d", "restivist:<organization-id>:covenant"]
+["t", "restivist-org-<organization-id>"]
 ["alt", "Encrypted Restivist organization covenant"]
 ```
 
@@ -90,8 +90,8 @@ membership key.
 Tags:
 
 ```
-["d", "restivism:<organization-id>:battery:<YYYY-MM-DD-week-start>"]
-["t", "restivism-org-<organization-id>"]
+["d", "restivist:<organization-id>:battery:<YYYY-MM-DD-week-start>"]
+["t", "restivist-org-<organization-id>"]
 ["alt", "Encrypted Restivist anonymous weekly battery summary"]
 ```
 
