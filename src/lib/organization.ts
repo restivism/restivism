@@ -8,7 +8,7 @@ function getWebCrypto(): Crypto {
   const webCrypto = globalThis.crypto;
   if (!webCrypto?.getRandomValues || !webCrypto.subtle) {
     const insecureHint = globalThis.isSecureContext === false
-      ? ' Open Restivism over HTTPS or use http://localhost when developing.'
+      ? ' Open Restivist over HTTPS or use http://localhost when developing.'
       : '';
     throw new Error(`Secure browser cryptography is unavailable.${insecureHint}`);
   }

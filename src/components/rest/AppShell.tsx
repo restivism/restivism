@@ -3,7 +3,7 @@ import { Link, NavLink } from 'react-router-dom';
 
 import { cn } from '@/lib/utils';
 
-import { RestivismMark } from './RestivismMark';
+import { RestivistMark } from './RestivistMark';
 
 export function AppShell({ children }: { children: ReactNode }) {
   return (
@@ -21,8 +21,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             to="/"
             className="flex min-w-0 items-center gap-2 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <RestivismMark className="h-8 w-auto shrink-0" aria-hidden />
-            <span className="truncate font-display text-2xl font-semibold tracking-tight">Restivism</span>
+            <RestivistMark className="h-8 w-auto shrink-0" aria-hidden />
+            <span className="truncate font-display text-2xl font-semibold tracking-tight">Restivist</span>
           </Link>
 
           <nav className="ml-auto flex items-center rounded-full border bg-card/80 p-1 text-sm font-bold" aria-label="Primary">

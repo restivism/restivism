@@ -43,7 +43,7 @@ function SessionFlow({ recharge }: { recharge: Recharge }) {
   const muted = !state.settings.music;
   const speed = params.has('demo') ? DEMO_SPEED : 1;
 
-  useSeoMeta({ title: `${recharge.name} | Restivism` });
+  useSeoMeta({ title: `${recharge.name} | Restivist` });
 
   const finish = useCallback((rested: number) => {
     playChime();

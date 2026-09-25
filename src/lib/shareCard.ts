@@ -95,7 +95,7 @@ export async function renderRechargeCard(card: RechargeCard): Promise<Blob> {
 
   ctx.font = '800 34px "Nunito Variable", sans-serif';
   ctx.letterSpacing = '8px';
-  ctx.fillText('RESTIVISM', left, 150);
+  ctx.fillText('RESTIVIST', left, 150);
   ctx.letterSpacing = '0px';
 
   const gained = card.before === undefined ? undefined : card.after - card.before;

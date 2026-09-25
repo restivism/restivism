@@ -257,7 +257,7 @@ export function useOrganizationSync(membership: OrganizationMembership) {
       tags: [
         ['d', covenantD(membership.id)],
         ['t', tag],
-        ['alt', 'Encrypted Restivism organization covenant'],
+        ['alt', 'Encrypted Restivist organization covenant'],
       ],
       content,
     }, hexToBytes(membership.leaderSecretKey));
@@ -292,7 +292,7 @@ export function useOrganizationSync(membership: OrganizationMembership) {
         ['t', tag],
         ['d', responseId],
         ['r', String(agreementRevision)],
-        ['alt', 'Encrypted Restivism covenant alignment'],
+        ['alt', 'Encrypted Restivist covenant alignment'],
       ],
       content,
     }, hexToBytes(membership.memberSecretKey));
@@ -323,7 +323,7 @@ export function useOrganizationSync(membership: OrganizationMembership) {
       tags: [
         ['d', batteryD(membership.id, weekKey)],
         ['t', tag],
-        ['alt', 'Encrypted Restivism anonymous weekly battery summary'],
+        ['alt', 'Encrypted Restivist anonymous weekly battery summary'],
       ],
       content,
     }, hexToBytes(membership.memberSecretKey));

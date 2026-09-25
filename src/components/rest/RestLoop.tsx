@@ -65,7 +65,7 @@ export function RestLoop() {
           Burnout is how movements lose. <span className="text-primary">Rest is how they last.</span>
         </h2>
         <p className="max-w-2xl text-lg leading-relaxed text-muted-foreground">
-          Organizers give until they are empty, and then they leave. Restivism makes rest part of the work, for you and for the people you organize with.
+          Organizers give until they are empty, and then they leave. Restivist makes rest part of the work, for you and for the people you organize with.
         </p>
       </div>
 

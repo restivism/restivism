@@ -1,8 +1,8 @@
-# Restivism
+# Restivist
 
 **Rest is resistance.**
 
-Restivism is a rest companion for activists and organizers. It keeps the original
+Restivist is a rest companion for activists and organizers. It keeps the original
 personal loop — check your battery, get a recharge plan, rest, and check in again —
 and adds a simple organization layer so rest can be protected by the group instead
 of depending on one person to push through.
@@ -13,14 +13,14 @@ of depending on one person to push through.
 
 1. **Check in.** Set your battery from 1 (running on fumes) to 5 (fully charged).
    Or say it out loud: speak for up to 30 seconds. Once the user opts in to
-   word understanding, Restivism transcribes what they said and reads its
+   word understanding, Restivist transcribes what they said and reads its
    sentiment on the device, and suggests a level from that; a flat, quiet voice
    can pull it lower, but tone never raises it. Without word understanding it
    shows loudness, tone (pitch movement), and emphasis but does not guess a
    level, because tone alone cannot tell tired from upset. The user always
    confirms or taps the level that feels true. If someone mentions suicide or
-   self-harm, Restivism skips the reading and points them to a helpline instead.
-2. **Get a plan.** Restivism recommends play, sleep, or social time plus a few small
+   self-harm, Restivist skips the reading and points them to a helpline instead.
+2. **Get a plan.** Restivist recommends play, sleep, or social time plus a few small
    acts of care.
 3. **Recharge.** Start a timed rest session.
 4. **Check in again.** See how your battery changed.
@@ -154,7 +154,7 @@ to Nostr or inventing a weak shared-key sync scheme.
 - One-time member privacy choice for automatic anonymous weekly battery sharing
 - Automatic weekly contribution refresh after opted-in battery check-ins
 - Leadership weekly restfulness metric after 3 anonymous contributors
-- Restivism battery glyphs for the organization average and 1–5 distribution
+- Restivist battery glyphs for the organization average and 1–5 distribution
 - Simple coverage request with **Waiting / Covered / Paused**
 - Explicit acceptance before coverage counts
 - Pause-work path when nobody has capacity
@@ -219,6 +219,6 @@ member's single weekly contribution without another share action. Each participa
 counts once, regardless of how often they checked in, and the organization result
 does not appear until at least three anonymous contributors exist.
 
-The leadership view uses the same Restivism battery glyphs for the weekly
+The leadership view uses the same Restivist battery glyphs for the weekly
 organization average and for the 1–5 distribution. It never displays member aliases
 or individual battery histories.

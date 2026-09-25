@@ -1,6 +1,6 @@
-# Restivism Nostr application data
+# Restivist Nostr application data
 
-Restivism uses the existing NIP-78 application-specific data kinds for encrypted
+Restivist uses the existing NIP-78 application-specific data kinds for encrypted
 organization synchronization. No new Nostr event kind is introduced.
 
 ## Organization channel
@@ -36,7 +36,7 @@ Tags:
 ```
 ["d", "restivism:<organization-id>:covenant"]
 ["t", "restivism-org-<organization-id>"]
-["alt", "Encrypted Restivism organization covenant"]
+["alt", "Encrypted Restivist organization covenant"]
 ```
 
 Encrypted payload:
@@ -92,7 +92,7 @@ Tags:
 ```
 ["d", "restivism:<organization-id>:battery:<YYYY-MM-DD-week-start>"]
 ["t", "restivism-org-<organization-id>"]
-["alt", "Encrypted Restivism anonymous weekly battery summary"]
+["alt", "Encrypted Restivist anonymous weekly battery summary"]
 ```
 
 Encrypted payload:

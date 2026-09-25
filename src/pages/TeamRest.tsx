@@ -77,7 +77,7 @@ function weekKey(now = Date.now()) {
 
 export default function TeamRest() {
   useSeoMeta({
-    title: 'Organization rest | Restivism',
+    title: 'Organization rest | Restivist',
     description: 'Create or join an organization, protect rest with a simple agreement, cover the work, and reflect together.',
   });
 
@@ -384,7 +384,7 @@ function OrganizationGate({
                 className="w-full rounded-xl border bg-background px-4 py-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
               <span className="block text-sm text-muted-foreground">
-                Restivism does not put the passcode inside the invite code.
+                Restivist does not put the passcode inside the invite code.
               </span>
             </label>
 
@@ -461,7 +461,7 @@ function OrganizationGate({
                   />
                   <span className="block font-semibold">Share anonymously each week</span>
                   <span className="mt-1 block text-sm leading-relaxed text-muted-foreground">
-                    Restivism automatically contributes your weekly average. Leaders never see your alias or individual history.
+                    Restivist automatically contributes your weekly average. Leaders never see your alias or individual history.
                   </span>
                 </label>
                 <label className={cn(
