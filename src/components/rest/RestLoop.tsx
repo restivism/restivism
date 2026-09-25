@@ -1,4 +1,4 @@
-import { ArrowUp } from 'lucide-react';
+import { ArrowDown } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { cn } from '@/lib/utils';
@@ -52,7 +52,7 @@ function focusBattery() {
   document.querySelector<HTMLElement>('[role="radio"][tabindex="0"]')?.focus({ preventScroll: true });
 }
 
-/** Shown before the first reading: why rest matters to movements, and how the loop works. */
+/** Leads the page when there is no recent reading: why rest matters to movements, and how the loop works. */
 export function RestLoop() {
   return (
     <section
@@ -93,7 +93,7 @@ export function RestLoop() {
           onClick={focusBattery}
           className="inline-flex h-12 items-center gap-2 rounded-full bg-primary px-6 text-base font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
-          <ArrowUp className="size-5 motion-safe:animate-float" aria-hidden />
+          <ArrowDown className="size-5 motion-safe:animate-float" aria-hidden />
           Start with your battery
         </button>
       </div>

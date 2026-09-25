@@ -6,14 +6,10 @@ import { dayKey, ENERGY_LEVELS, type EnergyCheckin, getRecharge, LEVEL_TEXT, REC
 import { cn } from '@/lib/utils';
 
 import { BatteryGlyph } from './BatteryControl';
-import { RestLoop } from './RestLoop';
 
 /** What your battery reading means you should do next: one recharge, then small acts of care. */
-export function RechargePlan({ checkin }: { checkin?: EnergyCheckin }) {
+export function RechargePlan({ checkin }: { checkin: EnergyCheckin }) {
   const { state, toggleQuest, completeSession } = useRest();
-
-  if (!checkin) return <RestLoop />;
-
   const { level } = checkin;
   const plan = RECHARGE_PLANS[level];
   const doneToday = state.quests[dayKey(checkin.at)] ?? [];
