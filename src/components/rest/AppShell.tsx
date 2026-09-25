@@ -21,9 +21,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             to="/"
             className="flex min-w-0 items-center gap-2 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <span className="grid size-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-primary to-ember text-primary-foreground shadow-sm">
-              <RestivismMark className="size-5" aria-hidden />
-            </span>
+            <RestivismMark className="h-8 w-auto shrink-0" aria-hidden />
             <span className="truncate font-display text-2xl font-semibold tracking-tight">Restivism</span>
           </Link>
 
