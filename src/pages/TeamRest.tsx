@@ -540,6 +540,8 @@ function OrganizationWorkspace({
     ? personalWeekCheckins.reduce((sum, checkin) => sum + checkin.level, 0) / personalWeekCheckins.length
     : undefined;
   const organizationWeek = orgSync.weeklyBattery.filter((item) => item.weekKey === currentWeekKey);
+  // Shared coverage plus anything saved only on this device (older entries or the demo).
+  const allCoverage: CoverageItem[] = [...orgSync.coverage, ...state.coverage];
 
   const coverageRef = useRef<HTMLElement>(null);
   const lastAutoShareRef = useRef('');
@@ -844,7 +846,7 @@ function OrganizationWorkspace({
               <div key={status} className="flex flex-col rounded-xl border border-white/15 bg-black/35 px-3 py-2 backdrop-blur-md">
                 <dt className="order-2 text-sm font-semibold text-white/75">{label}</dt>
                 <dd className={cn('font-display text-3xl font-semibold tabular-nums', color)}>
-                  {state.coverage.filter((item) => item.status === status).length}
+                  {allCoverage.filter((item) => item.status === status).length}
                 </dd>
               </div>
             ))}
@@ -1175,7 +1177,7 @@ function OrganizationWorkspace({
         )}
 
         <div className="mt-5 space-y-3">
-          {orgSync.coverage.length === 0 && state.coverage.length === 0 ? (
+          {allCoverage.length === 0 ? (
             <div className="rounded-xl border border-dashed px-5 py-8 text-center">
               <CircleDashed className="mx-auto size-6 text-muted-foreground" aria-hidden />
               <p className="mt-2 font-semibold">No coverage planned yet.</p>
