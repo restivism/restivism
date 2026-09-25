@@ -173,15 +173,47 @@ Tags:
 Encrypted payload:
 
 ```json
-{ "type": "coverage-status", "requestId": "<request-pubkey>", "status": "covered", "recordedAt": 0 }
+{
+  "type": "coverage-status",
+  "requestId": "<request-pubkey>",
+  "status": "covered",
+  "coveringPerson": "Birch",
+  "recordedAt": 0
+}
 ```
 
-`status` is `covered` (the leader confirmed the handoff) or `removed` (hidden for
-everyone). Without a leader status, a request is `waiting`, or `paused` when it has
-no `coveringPerson`.
+`status` is `waiting` (the leader asked someone to cover), `covered` (the leader
+confirmed the handoff) or `removed` (hidden for everyone). A leader `coveringPerson`
+replaces the requester's suggestion. Without a leader status, a request is `waiting`,
+or `paused` when it has no `coveringPerson`.
 
 Unlike alignment and battery summaries, coverage contains names. They are encrypted
 with the organization sync key, so anyone holding the invite and passcode can read them.
+
+## Member list
+
+Kind: `30078`
+
+Each membership publishes its chosen name so others can pick it to cover work. The
+entry is signed by a separate per-membership key that is never used for alignment or
+battery summaries, so names cannot be linked to anonymous submissions.
+
+Tags:
+
+```
+["d", "restivist:<organization-id>:member:<member-list-pubkey>"]
+["t", "restivist-org-<organization-id>"]
+["alt", "Encrypted Restivist organization member name"]
+```
+
+Encrypted payload:
+
+```json
+{ "type": "member", "alias": "Birch", "recordedAt": 0 }
+```
+
+Clients ignore an entry whose `d` tag does not name its own signing pubkey. Leaving an
+organization replaces the entry with `{ "type": "member", "left": true, "recordedAt": 0 }`.
 
 ## Security boundary
 

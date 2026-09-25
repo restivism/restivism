@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNostr } from '@nostrify/react';
 import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools/pure';
@@ -72,13 +72,25 @@ type CoverageRequestPayload =
     }
   | { type: 'coverage-request'; withdrawn: true; recordedAt: number };
 
-/** Signed by the leader key; only the leader can confirm or remove coverage. */
+/**
+ * Signed by the leader key; only the leader can assign, confirm, or remove coverage.
+ * `coveringPerson` overrides the requester's suggestion.
+ */
 interface CoverageStatusPayload {
   type: 'coverage-status';
   requestId: string;
-  status: 'covered' | 'removed';
+  status: 'waiting' | 'covered' | 'removed';
+  coveringPerson?: string;
   recordedAt: number;
 }
+
+/**
+ * A member's name in the shared member list, signed by a per-membership key that is
+ * never used for anonymous alignment or battery submissions.
+ */
+type MemberPayload =
+  | { type: 'member'; alias: string; recordedAt: number; left?: false }
+  | { type: 'member'; left: true; recordedAt: number };
 
 export interface CoverageRequestInput {
   restingPerson: string;
@@ -97,7 +109,8 @@ type SharedPayload =
   | AlignmentPayload
   | WeeklyBatteryPayload
   | CoverageRequestPayload
-  | CoverageStatusPayload;
+  | CoverageStatusPayload
+  | MemberPayload;
 
 function base64UrlToBytes(value: string): Uint8Array<ArrayBuffer> {
   const padded = value.replaceAll('-', '+').replaceAll('_', '/') + '='.repeat((4 - value.length % 4) % 4);
@@ -198,6 +211,10 @@ function coverageStatusD(organizationId: string, requestId: string) {
   return `restivist:${organizationId}:coverage-status:${requestId}`;
 }
 
+function memberD(organizationId: string, memberId: string) {
+  return `restivist:${organizationId}:member:${memberId}`;
+}
+
 function dTag(tags: string[][]) {
   return tags.find(([name]) => name === 'd')?.[1];
 }
@@ -222,9 +239,15 @@ function isValidCoverageRequest(payload: CoverageRequestPayload): boolean {
 function isValidCoverageStatus(payload: CoverageStatusPayload): boolean {
   return (
     /^[0-9a-f]{64}$/u.test(payload.requestId) &&
-    (payload.status === 'covered' || payload.status === 'removed') &&
+    ['waiting', 'covered', 'removed'].includes(payload.status) &&
+    (payload.coveringPerson === undefined || boundedString(payload.coveringPerson, 40, true)) &&
     typeof payload.recordedAt === 'number'
   );
+}
+
+function isValidMember(payload: MemberPayload): boolean {
+  if (typeof payload.recordedAt !== 'number') return false;
+  return payload.left === true || boundedString(payload.alias, 40, true);
 }
 
 function newestByResponse(items: SyncedAlignment[]) {
@@ -246,6 +269,10 @@ export function useOrganizationSync(membership: OrganizationMembership) {
   const [coverageKeys, setCoverageKeys] = useLocalStorage<Record<string, string>>(
     `restivist:organization:${membership.id}:coverage-keys`,
     {},
+  );
+  const [memberKey, setMemberKey] = useLocalStorage<string>(
+    `restivist:organization:${membership.id}:member-list-key`,
+    '',
   );
 
   const covenantQuery = useQuery({
@@ -304,7 +331,7 @@ export function useOrganizationSync(membership: OrganizationMembership) {
     enabled,
     refetchInterval: 10_000,
     queryFn: async ({ signal }) => {
-      if (!membership.syncKey) return { weeklyBattery: [], coverage: [] };
+      if (!membership.syncKey) return { weeklyBattery: [], coverage: [], members: new Map<string, string>() };
       const events = await pool.query([{
         kinds: [APP_KIND],
         '#t': [tag],
@@ -314,6 +341,7 @@ export function useOrganizationSync(membership: OrganizationMembership) {
       const submissions: SyncedWeeklyBattery[] = [];
       const requests = new Map<string, CoverageRequestPayload>();
       const statuses = new Map<string, CoverageStatusPayload>();
+      const memberEntries = new Map<string, MemberPayload>();
 
       for (const event of events) {
         const payload = await decryptPayload(membership.syncKey, event.content);
@@ -342,6 +370,13 @@ export function useOrganizationSync(membership: OrganizationMembership) {
         ) {
           const existing = statuses.get(payload.requestId);
           if (!existing || payload.recordedAt > existing.recordedAt) statuses.set(payload.requestId, payload);
+        } else if (
+          payload?.type === 'member' &&
+          d === memberD(membership.id, event.pubkey) &&
+          isValidMember(payload)
+        ) {
+          const existing = memberEntries.get(event.pubkey);
+          if (!existing || payload.recordedAt > existing.recordedAt) memberEntries.set(event.pubkey, payload);
         }
       }
 
@@ -355,22 +390,29 @@ export function useOrganizationSync(membership: OrganizationMembership) {
       const coverage: SharedCoverageItem[] = [];
       for (const [id, request] of requests) {
         if (request.withdrawn) continue;
-        const leaderStatus = statuses.get(id)?.status;
-        if (leaderStatus === 'removed') continue;
+        const leaderStatus = statuses.get(id);
+        if (leaderStatus?.status === 'removed') continue;
+        const coveringPerson = leaderStatus?.coveringPerson ?? request.coveringPerson;
         coverage.push({
           id,
           restingPerson: request.restingPerson,
           work: request.work,
-          coveringPerson: request.coveringPerson,
+          coveringPerson,
           date: request.date,
           note: request.note,
-          status: leaderStatus === 'covered' ? 'covered' : request.coveringPerson ? 'waiting' : 'paused',
+          status: leaderStatus?.status === 'covered' ? 'covered' : coveringPerson ? 'waiting' : 'paused',
           requestedAt: request.recordedAt,
         });
       }
       coverage.sort((a, b) => b.requestedAt - a.requestedAt);
 
-      return { weeklyBattery: [...latest.values()], coverage };
+      // Member id (list key pubkey) → alias, for everyone still in the organization.
+      const members = new Map<string, string>();
+      for (const [id, entry] of memberEntries) {
+        if (!entry.left) members.set(id, entry.alias);
+      }
+
+      return { weeklyBattery: [...latest.values()], coverage, members };
     },
   });
 
@@ -518,7 +560,11 @@ export function useOrganizationSync(membership: OrganizationMembership) {
     await appDataQuery.refetch();
   };
 
-  const setCoverageStatus = async (requestId: string, status: CoverageStatusPayload['status']) => {
+  const setCoverageStatus = async (
+    requestId: string,
+    status: CoverageStatusPayload['status'],
+    coveringPerson?: string,
+  ) => {
     if (
       membership.role !== 'leader' ||
       !membership.syncKey ||
@@ -531,6 +577,7 @@ export function useOrganizationSync(membership: OrganizationMembership) {
       type: 'coverage-status',
       requestId,
       status,
+      coveringPerson: coveringPerson?.trim() || undefined,
       recordedAt: Date.now(),
     };
     const content = await encryptPayload(membership.syncKey, payload);
@@ -549,6 +596,58 @@ export function useOrganizationSync(membership: OrganizationMembership) {
     await appDataQuery.refetch();
   };
 
+  const publishMemberEntry = async (payload: MemberPayload) => {
+    if (!membership.syncKey) return;
+    let secretHex = memberKey;
+    if (!secretHex) {
+      secretHex = bytesToHex(generateSecretKey());
+      setMemberKey(secretHex);
+    }
+
+    const content = await encryptPayload(membership.syncKey, payload);
+    const event = finalizeEvent({
+      kind: APP_KIND,
+      created_at: Math.floor(Date.now() / 1000),
+      tags: [
+        ['d', memberD(membership.id, getPublicKey(hexToBytes(secretHex)))],
+        ['t', tag],
+        ['alt', 'Encrypted Restivist organization member name'],
+      ],
+      content,
+    }, hexToBytes(secretHex));
+
+    await pool.event(event, { signal: AbortSignal.timeout(5_000) });
+  };
+
+  /** Removes this device's name from the shared member list, e.g. before leaving. */
+  const leaveMemberList = async () => {
+    if (!memberKey) return;
+    await publishMemberEntry({ type: 'member', left: true, recordedAt: Date.now() });
+  };
+
+  // Keep this membership's name in the shared member list so others can pick it for coverage.
+  const members = appDataQuery.data?.members;
+  const myMemberId = memberKey ? getPublicKey(hexToBytes(memberKey)) : undefined;
+  const listedAlias = myMemberId ? members?.get(myMemberId) : undefined;
+  const announcedAliasRef = useRef('');
+  useEffect(() => {
+    if (!enabled || !members || listedAlias === membership.alias) return;
+    if (announcedAliasRef.current === membership.alias) return;
+    announcedAliasRef.current = membership.alias;
+
+    void publishMemberEntry({ type: 'member', alias: membership.alias, recordedAt: Date.now() })
+      .then(() => appDataQuery.refetch())
+      .catch((error: unknown) => {
+        console.error('Failed to share organization member name', error);
+        announcedAliasRef.current = '';
+      });
+    // publishMemberEntry and appDataQuery change identity every render; the inputs below decide when to announce.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, members, listedAlias, membership.alias]);
+
+  const memberNames = [...new Set(members?.values() ?? [])]
+    .sort((a, b) => a.localeCompare(b));
+
   return {
     canSync: enabled && Boolean(membership.memberSecretKey),
     covenant: covenantQuery.data,
@@ -557,6 +656,8 @@ export function useOrganizationSync(membership: OrganizationMembership) {
     alignmentResponses: alignmentQuery.data ?? [],
     weeklyBattery: membership.role === 'leader' ? appDataQuery.data?.weeklyBattery ?? [] : [],
     coverage: appDataQuery.data?.coverage ?? [],
+    memberNames,
+    leaveMemberList,
     ownsCoverage: (requestId: string) => requestId in coverageKeys,
     publishCoverageRequest,
     withdrawCoverage,

@@ -14,11 +14,12 @@ import {
   ShieldCheck,
   UsersRound,
 } from 'lucide-react';
-import { type FormEvent, useEffect, useRef, useState } from 'react';
+import { type FormEvent, useEffect, useId, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 
 import { AppShell } from '@/components/rest/AppShell';
 import { BatteryGlyph } from '@/components/rest/BatteryControl';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { useOrganizationSync } from '@/hooks/useOrganizationSync';
 import { useRest } from '@/hooks/useRest';
@@ -55,6 +56,9 @@ function localDateValue() {
   const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
   return local.toISOString().slice(0, 10);
 }
+
+/** Select value for typing a name that is not in the shared member list. */
+const OTHER_PERSON = '__other__';
 
 function sameName(a: string, b: string) {
   return a.trim().toLocaleLowerCase() === b.trim().toLocaleLowerCase();
@@ -130,10 +134,6 @@ export default function TeamRest() {
   };
 
   const leaveOrganization = (organizationId: string) => {
-    if (!window.confirm('Leave this organization on this device? You can only get back in with its invite code and passcode.')) {
-      return;
-    }
-
     setDirectory((previous) => {
       const memberships = previous.memberships.filter((item) => item.id !== organizationId);
       return {
@@ -362,6 +362,7 @@ function OrganizationGate({
 
             <label className="block space-y-2">
               <span className="font-semibold">Your name or alias</span>
+              <span className="block text-sm text-muted-foreground">Shared with the organization so people can choose you to cover work.</span>
               <input
                 value={alias}
                 onChange={(event) => setAlias(event.target.value)}
@@ -434,6 +435,7 @@ function OrganizationGate({
 
             <label className="block space-y-2">
               <span className="font-semibold">Your name or alias</span>
+              <span className="block text-sm text-muted-foreground">Shared with the organization so people can choose you to cover work.</span>
               <input
                 value={alias}
                 onChange={(event) => setAlias(event.target.value)}
@@ -695,9 +697,18 @@ function OrganizationWorkspace({
     );
   };
 
-  const confirmSharedCoverage = async (requestId: string) => {
+  const assignSharedCoverage = async (requestId: string, person: string) => {
     try {
-      await orgSync.setCoverageStatus(requestId, 'covered');
+      await orgSync.setCoverageStatus(requestId, 'waiting', person);
+      setMessage(`Asked ${person} to cover. Mark it covered once they agree.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not assign coverage.');
+    }
+  };
+
+  const confirmSharedCoverage = async (requestId: string, person: string) => {
+    try {
+      await orgSync.setCoverageStatus(requestId, 'covered', person);
       setMessage('Coverage confirmed for the whole organization.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not confirm coverage.');
@@ -715,6 +726,19 @@ function OrganizationWorkspace({
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not remove coverage.');
     }
+  };
+
+  const leave = async () => {
+    if (!window.confirm('Leave this organization on this device? You can only get back in with its invite code and passcode.')) {
+      return;
+    }
+
+    try {
+      await orgSync.leaveMemberList();
+    } catch (error) {
+      console.error('Failed to remove name from the organization member list', error);
+    }
+    onLeave();
   };
 
   const markLocalCovered = (itemId: string) => {
@@ -1111,16 +1135,13 @@ function OrganizationWorkspace({
             </div>
 
             {coverageAction === 'cover' && (
-              <label className="block space-y-2">
-                <span className="font-semibold">Who can cover?</span>
-                <input
-                  value={coveringPerson}
-                  onChange={(event) => setCoveringPerson(event.target.value)}
-                  maxLength={40}
-                  placeholder="Birch"
-                  className="w-full rounded-xl border bg-background px-4 py-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                />
-              </label>
+              <CoveringPersonPicker
+                label="Who can cover?"
+                value={coveringPerson}
+                onChange={setCoveringPerson}
+                names={orgSync.memberNames}
+                restingPerson={restingPerson}
+              />
             )}
 
             <label className="block space-y-2">
@@ -1171,7 +1192,9 @@ function OrganizationWorkspace({
                   <CoverageRow
                     key={item.id}
                     item={item}
-                    onAccept={isLeader ? () => void confirmSharedCoverage(item.id) : undefined}
+                    assignNames={isLeader ? orgSync.memberNames : undefined}
+                    onAssign={isLeader ? (person) => void assignSharedCoverage(item.id, person) : undefined}
+                    onAccept={isLeader ? (person) => void confirmSharedCoverage(item.id, person) : undefined}
                     onRemove={canRemove ? () => void removeSharedCoverage(item.id) : undefined}
                   />
                 );
@@ -1251,7 +1274,7 @@ function OrganizationWorkspace({
         </Link>
         <button
           type="button"
-          onClick={onLeave}
+          onClick={() => void leave()}
           className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-muted-foreground hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <LogOut className="size-4" aria-hidden />
@@ -1622,27 +1645,98 @@ function AgreementPromise({
   );
 }
 
+function CoveringPersonPicker({
+  label,
+  value,
+  onChange,
+  names,
+  restingPerson,
+}: {
+  label: string;
+  value: string;
+  onChange: (person: string) => void;
+  /** Names from the shared member list. */
+  names: string[];
+  restingPerson: string;
+}) {
+  const id = useId();
+  const options = names.filter((name) => !sameName(name, restingPerson));
+  const [typingOther, setTypingOther] = useState(
+    () => value !== '' && !options.some((name) => name === value),
+  );
+  const showInput = options.length === 0 || typingOther;
+
+  return (
+    <div className="space-y-2">
+      <label htmlFor={id} className="block font-semibold">{label}</label>
+      {options.length > 0 && (
+        <Select
+          value={typingOther ? OTHER_PERSON : value}
+          onValueChange={(next) => {
+            const other = next === OTHER_PERSON;
+            setTypingOther(other);
+            onChange(other ? '' : next);
+          }}
+        >
+          <SelectTrigger
+            id={showInput ? undefined : id}
+            className="w-full rounded-xl bg-background px-4 py-3 text-base data-[size=default]:h-auto"
+          >
+            <SelectValue placeholder="Choose a member" />
+          </SelectTrigger>
+          <SelectContent>
+            {options.map((name) => (
+              <SelectItem key={name} value={name}>{name}</SelectItem>
+            ))}
+            <SelectItem value={OTHER_PERSON}>Someone else…</SelectItem>
+          </SelectContent>
+        </Select>
+      )}
+      {showInput && (
+        <input
+          id={id}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          maxLength={40}
+          placeholder="Birch"
+          className="w-full rounded-xl border bg-background px-4 py-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        />
+      )}
+    </div>
+  );
+}
+
 function CoverageRow({
   item,
   localOnly = false,
+  assignNames,
+  onAssign,
   onAccept,
   onRemove,
 }: {
   item: CoverageItem;
   /** Saved only on this device, from before coverage was shared or from the demo. */
   localOnly?: boolean;
+  /** Present only for the leader, who may choose who covers. */
+  assignNames?: string[];
+  onAssign?: (person: string) => void;
   /** Present only when this viewer may confirm the handoff. */
-  onAccept?: () => void;
+  onAccept?: (person: string) => void;
   /** Present only when this viewer may remove the request. */
   onRemove?: () => void;
 }) {
+  const [draftPerson, setDraftPerson] = useState(item.coveringPerson ?? '');
   const status = item.status === 'covered'
     ? { label: 'Covered', icon: CheckCircle2, classes: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300' }
     : item.status === 'paused'
       ? { label: 'Paused', icon: PauseCircle, classes: 'bg-amber-500/15 text-amber-800 dark:text-amber-300' }
       : { label: 'Waiting', icon: CircleDashed, classes: 'bg-secondary text-secondary-foreground' };
   const StatusIcon = status.icon;
-  const showAccept = item.status === 'waiting' && onAccept;
+  const canAssign = Boolean(assignNames && onAssign) && item.status !== 'covered';
+  const person = canAssign ? draftPerson.trim() : item.coveringPerson ?? '';
+  const invalidPerson = person !== '' && sameName(person, item.restingPerson);
+  const showAccept = Boolean(onAccept) && item.status !== 'covered' && (localOnly ? item.status === 'waiting' : person !== '');
+  const showAssign = canAssign && person !== '' && person !== (item.coveringPerson ?? '');
 
   return (
     <article className="rounded-xl border p-4">
@@ -1675,15 +1769,41 @@ function CoverageRow({
         </span>
       </div>
 
-      {(showAccept || onRemove) && (
+      {canAssign && assignNames && (
+        <div className="mt-4">
+          <CoveringPersonPicker
+            label="Who covers?"
+            value={draftPerson}
+            onChange={setDraftPerson}
+            names={assignNames}
+            restingPerson={item.restingPerson}
+          />
+          {invalidPerson && (
+            <p className="mt-2 text-sm text-destructive">The person resting cannot also cover their own work.</p>
+          )}
+        </div>
+      )}
+
+      {(showAccept || showAssign || onRemove) && (
         <div className="mt-4 flex flex-wrap items-center gap-2">
           {showAccept && (
             <button
               type="button"
-              onClick={onAccept}
-              className="rounded-full bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              disabled={invalidPerson}
+              onClick={() => onAccept?.(person)}
+              className="rounded-full bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
             >
               {localOnly ? 'Mark accepted' : 'Mark covered'}
+            </button>
+          )}
+          {showAssign && (
+            <button
+              type="button"
+              disabled={invalidPerson}
+              onClick={() => onAssign?.(person)}
+              className="rounded-full border px-4 py-2 text-sm font-bold hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+            >
+              Ask {person} to cover
             </button>
           )}
           {onRemove && (
