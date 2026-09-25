@@ -212,6 +212,7 @@ function OrganizationGate({
         joinedAt: Date.now(),
         syncKey: result.organization.syncKey,
         leaderPubkey: result.organization.leaderPubkey,
+        relays: result.organization.relays,
         leaderSecretKey: result.organization.leaderSecretKey,
         memberSecretKey: result.organization.memberSecretKey,
         inviteCode: result.inviteCode,
@@ -253,6 +254,7 @@ function OrganizationGate({
         joinedAt: Date.now(),
         syncKey: organization.syncKey,
         leaderPubkey: organization.leaderPubkey,
+        relays: organization.relays,
         memberSecretKey: organization.memberSecretKey,
         autoShareWeeklyBattery: batterySharing === 'auto',
       });
@@ -498,7 +500,7 @@ function OrganizationGate({
 
       <p className="px-2 text-sm leading-relaxed text-muted-foreground">
         New organizations include encrypted shared-sync credentials inside the passcode-protected invite.
-        Covenant, anonymous alignment, and weekly restfulness can then move between browsers without exposing their plaintext to relays.
+        Covenant, coverage, anonymous alignment, and weekly restfulness then move between browsers through the organization's own relays without exposing their plaintext.
       </p>
     </div>
   );
@@ -550,6 +552,7 @@ function OrganizationWorkspace({
   const [date, setDate] = useState(localDateValue);
   const [handoffNote, setHandoffNote] = useState('');
   const [showCoverageForm, setShowCoverageForm] = useState(() => requestedFocus === 'coverage');
+  const [savingCoverage, setSavingCoverage] = useState(false);
   const [message, setMessage] = useState('');
   const [showInvite, setShowInvite] = useState(false);
 
@@ -632,7 +635,7 @@ function OrganizationWorkspace({
     }));
   };
 
-  const addCoverage = (event: FormEvent) => {
+  const addCoverage = async (event: FormEvent) => {
     event.preventDefault();
 
     if (!restingPerson.trim() || !work.trim() || !date) {
@@ -648,20 +651,35 @@ function OrganizationWorkspace({
       return;
     }
 
-    const item: CoverageItem = {
-      id: crypto.randomUUID(),
+    const request = {
       restingPerson: restingPerson.trim(),
       work: work.trim(),
       coveringPerson: coverageAction === 'cover' ? coveringPerson.trim() : undefined,
       date,
       note: handoffNote.trim(),
-      status: coverageAction === 'pause' ? 'paused' : 'waiting',
     };
 
-    setState((previous) => ({
-      ...previous,
-      coverage: [item, ...previous.coverage],
-    }));
+    setSavingCoverage(true);
+    try {
+      if (orgSync.canSync) {
+        await orgSync.publishCoverageRequest(request);
+      } else {
+        const item: CoverageItem = {
+          id: crypto.randomUUID(),
+          ...request,
+          status: coverageAction === 'pause' ? 'paused' : 'waiting',
+        };
+        setState((previous) => ({
+          ...previous,
+          coverage: [item, ...previous.coverage],
+        }));
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not share the coverage request.');
+      return;
+    } finally {
+      setSavingCoverage(false);
+    }
 
     setWork('');
     setCoveringPerson('');
@@ -669,23 +687,47 @@ function OrganizationWorkspace({
     setCoverageAction('cover');
     setShowCoverageForm(false);
     setMessage(
-      item.status === 'paused'
+      coverageAction === 'pause'
         ? 'That work is paused so the rest window can stay protected.'
-        : 'Coverage request added. It is not covered until the handoff is accepted.',
+        : orgSync.canSync
+          ? 'Coverage request shared. It is not covered until the organization leader confirms the handoff.'
+          : 'Coverage request added on this device. It is not covered until the handoff is accepted.',
     );
   };
 
-  const markCovered = (itemId: string) => {
+  const confirmSharedCoverage = async (requestId: string) => {
+    try {
+      await orgSync.setCoverageStatus(requestId, 'covered');
+      setMessage('Coverage confirmed for the whole organization.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not confirm coverage.');
+    }
+  };
+
+  const removeSharedCoverage = async (requestId: string) => {
+    try {
+      if (membership.role === 'leader') {
+        await orgSync.setCoverageStatus(requestId, 'removed');
+      } else {
+        await orgSync.withdrawCoverage(requestId);
+      }
+      setMessage('Coverage removed for the whole organization.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not remove coverage.');
+    }
+  };
+
+  const markLocalCovered = (itemId: string) => {
     setState((previous) => ({
       ...previous,
       coverage: previous.coverage.map((item) => (
         item.id === itemId ? { ...item, status: 'covered' } : item
       )),
     }));
-    setMessage('Coverage accepted.');
+    setMessage('Coverage accepted on this device.');
   };
 
-  const removeCoverage = (itemId: string) => {
+  const removeLocalCoverage = (itemId: string) => {
     setState((previous) => ({
       ...previous,
       coverage: previous.coverage.filter((item) => item.id !== itemId),
@@ -1007,7 +1049,7 @@ function OrganizationWorkspace({
         </div>
 
         {showCoverageForm && (
-          <form onSubmit={addCoverage} className="mt-5 space-y-4 rounded-2xl border bg-background/60 p-4 sm:p-5">
+          <form onSubmit={(event) => void addCoverage(event)} className="mt-5 space-y-4 rounded-2xl border bg-background/60 p-4 sm:p-5">
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="block space-y-2">
                 <span className="font-semibold">Who is resting?</span>
@@ -1095,7 +1137,8 @@ function OrganizationWorkspace({
             <div className="flex flex-wrap gap-2">
               <button
                 type="submit"
-                className="rounded-full bg-primary px-5 py-2.5 font-semibold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                disabled={savingCoverage}
+                className="rounded-full bg-primary px-5 py-2.5 font-semibold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
               >
                 {coverageAction === 'pause' ? 'Pause the work' : 'Request coverage'}
               </button>
@@ -1111,7 +1154,7 @@ function OrganizationWorkspace({
         )}
 
         <div className="mt-5 space-y-3">
-          {state.coverage.length === 0 ? (
+          {orgSync.coverage.length === 0 && state.coverage.length === 0 ? (
             <div className="rounded-xl border border-dashed px-5 py-8 text-center">
               <CircleDashed className="mx-auto size-6 text-muted-foreground" aria-hidden />
               <p className="mt-2 font-semibold">No coverage planned yet.</p>
@@ -1120,14 +1163,29 @@ function OrganizationWorkspace({
               </p>
             </div>
           ) : (
-            state.coverage.map((item) => (
-              <CoverageRow
-                key={item.id}
-                item={item}
-                onAccept={() => markCovered(item.id)}
-                onRemove={() => removeCoverage(item.id)}
-              />
-            ))
+            <>
+              {orgSync.coverage.map((item) => {
+                const isLeader = membership.role === 'leader';
+                const canRemove = isLeader || orgSync.ownsCoverage(item.id);
+                return (
+                  <CoverageRow
+                    key={item.id}
+                    item={item}
+                    onAccept={isLeader ? () => void confirmSharedCoverage(item.id) : undefined}
+                    onRemove={canRemove ? () => void removeSharedCoverage(item.id) : undefined}
+                  />
+                );
+              })}
+              {state.coverage.map((item) => (
+                <CoverageRow
+                  key={item.id}
+                  item={item}
+                  localOnly
+                  onAccept={() => markLocalCovered(item.id)}
+                  onRemove={() => removeLocalCoverage(item.id)}
+                />
+              ))}
+            </>
           )}
         </div>
       </section>
@@ -1566,12 +1624,17 @@ function AgreementPromise({
 
 function CoverageRow({
   item,
+  localOnly = false,
   onAccept,
   onRemove,
 }: {
   item: CoverageItem;
-  onAccept: () => void;
-  onRemove: () => void;
+  /** Saved only on this device, from before coverage was shared or from the demo. */
+  localOnly?: boolean;
+  /** Present only when this viewer may confirm the handoff. */
+  onAccept?: () => void;
+  /** Present only when this viewer may remove the request. */
+  onRemove?: () => void;
 }) {
   const status = item.status === 'covered'
     ? { label: 'Covered', icon: CheckCircle2, classes: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300' }
@@ -1579,6 +1642,7 @@ function CoverageRow({
       ? { label: 'Paused', icon: PauseCircle, classes: 'bg-amber-500/15 text-amber-800 dark:text-amber-300' }
       : { label: 'Waiting', icon: CircleDashed, classes: 'bg-secondary text-secondary-foreground' };
   const StatusIcon = status.icon;
+  const showAccept = item.status === 'waiting' && onAccept;
 
   return (
     <article className="rounded-xl border p-4">
@@ -1599,6 +1663,10 @@ function CoverageRow({
               : <> · this work waits</>}
           </p>
           {item.note && <p className="text-sm text-muted-foreground">{item.note}</p>}
+          {localOnly && <p className="text-sm text-muted-foreground">Only on this device.</p>}
+          {!localOnly && item.status === 'waiting' && !onAccept && (
+            <p className="text-sm text-muted-foreground">Waiting for the organization leader to confirm.</p>
+          )}
         </div>
 
         <span className={cn('inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-bold', status.classes)}>
@@ -1607,24 +1675,28 @@ function CoverageRow({
         </span>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        {item.status === 'waiting' && (
-          <button
-            type="button"
-            onClick={onAccept}
-            className="rounded-full bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            Mark accepted
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={onRemove}
-          className="ml-auto rounded-full px-3 py-2 text-sm font-semibold text-muted-foreground hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          Remove
-        </button>
-      </div>
+      {(showAccept || onRemove) && (
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          {showAccept && (
+            <button
+              type="button"
+              onClick={onAccept}
+              className="rounded-full bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {localOnly ? 'Mark accepted' : 'Mark covered'}
+            </button>
+          )}
+          {onRemove && (
+            <button
+              type="button"
+              onClick={onRemove}
+              className="ml-auto rounded-full px-3 py-2 text-sm font-semibold text-muted-foreground hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              Remove
+            </button>
+          )}
+        </div>
+      )}
     </article>
   );
 }

@@ -21,8 +21,8 @@ Relay-visible organization grouping uses:
 The UUID is random and does not contain the organization name.
 
 All event `content` described below is an AES-256-GCM encrypted JSON envelope.
-The plaintext organization name, covenant, alignment response, comment, and battery
-summary are not published to relays.
+The plaintext organization name, covenant, coverage, alignment response, comment,
+and battery summary are not published to relays.
 
 ## Covenant
 
@@ -110,6 +110,78 @@ Encrypted payload:
 The leadership UI does not display anonymous member pubkeys. It aggregates one
 weekly average per anonymous membership and withholds the organization metric until
 at least three contributors are present.
+
+## Organization relays
+
+The invite payload carries the organization's relay list:
+
+```json
+{ "relays": ["wss://relay.ditto.pub", "wss://relay.dreamith.to", "wss://nos.lol"] }
+```
+
+Every organization event is published to, and queried from, exactly these relays,
+independent of the user's personal NIP-65 relay list. Invites created before this
+field existed fall back to the same default list.
+
+## Coverage request
+
+Kind: `30078`
+
+Each request is signed by a fresh key generated for that request alone. Its public
+key is the request id, so only the requesting device can replace the request, and
+requests cannot be linked to the anonymous membership key used for alignment and
+battery summaries.
+
+Tags:
+
+```
+["d", "restivist:<organization-id>:coverage:<request-pubkey>"]
+["t", "restivist-org-<organization-id>"]
+["alt", "Encrypted Restivist coverage request"]
+```
+
+Encrypted payload:
+
+```json
+{
+  "type": "coverage-request",
+  "restingPerson": "Cedar",
+  "work": "Community inbox",
+  "coveringPerson": "Birch",
+  "date": "2026-09-25",
+  "note": "Urgent replies only",
+  "recordedAt": 0
+}
+```
+
+`coveringPerson` is omitted when the work is paused. Clients ignore a request whose
+`d` tag does not name its own signing pubkey. The requester withdraws a request by
+replacing it with `{ "type": "coverage-request", "withdrawn": true, "recordedAt": 0 }`.
+
+## Coverage status
+
+Kind: `30078`, signed only by the leader key and trusted only from that pubkey.
+
+Tags:
+
+```
+["d", "restivist:<organization-id>:coverage-status:<request-pubkey>"]
+["t", "restivist-org-<organization-id>"]
+["alt", "Encrypted Restivist coverage status"]
+```
+
+Encrypted payload:
+
+```json
+{ "type": "coverage-status", "requestId": "<request-pubkey>", "status": "covered", "recordedAt": 0 }
+```
+
+`status` is `covered` (the leader confirmed the handoff) or `removed` (hidden for
+everyone). Without a leader status, a request is `waiting`, or `paused` when it has
+no `coveringPerson`.
+
+Unlike alignment and battery summaries, coverage contains names. They are encrypted
+with the organization sync key, so anyone holding the invite and passcode can read them.
 
 ## Security boundary
 

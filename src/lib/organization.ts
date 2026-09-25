@@ -3,6 +3,36 @@ import { generateSecretKey, getPublicKey } from 'nostr-tools/pure';
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const PBKDF2_ITERATIONS = 150_000;
+const MAX_ORGANIZATION_RELAYS = 8;
+
+/**
+ * Relays every organization device reads from and writes to, regardless of
+ * personal relay settings. Invites created before relays were embedded fall back to these.
+ */
+export const DEFAULT_ORGANIZATION_RELAYS: readonly string[] = [
+  'wss://relay.ditto.pub',
+  'wss://relay.dreamith.to',
+  'wss://nos.lol',
+];
+
+/** Keeps only valid, unique wss:// relay URLs; falls back to the defaults when none remain. */
+export function normalizeOrganizationRelays(value: unknown): string[] {
+  if (!Array.isArray(value)) return [...DEFAULT_ORGANIZATION_RELAYS];
+
+  const relays = new Set<string>();
+  for (const item of value) {
+    if (typeof item !== 'string') continue;
+    try {
+      const url = new URL(item.trim());
+      if (url.protocol === 'wss:') relays.add(url.href.replace(/\/$/u, ''));
+    } catch {
+      // Ignore malformed relay URLs.
+    }
+    if (relays.size === MAX_ORGANIZATION_RELAYS) break;
+  }
+
+  return relays.size > 0 ? [...relays] : [...DEFAULT_ORGANIZATION_RELAYS];
+}
 
 function getWebCrypto(): Crypto {
   const webCrypto = globalThis.crypto;
@@ -40,6 +70,8 @@ export interface OrganizationMembership {
   leaderPubkey?: string;
   /** Only present for leaders; never included in member invites. */
   leaderSecretKey?: string;
+  /** Relays shared by the whole organization. Missing on older memberships; use the defaults. */
+  relays?: string[];
   /** Anonymous per-membership signing key for alignment and restfulness submissions. */
   memberSecretKey?: string;
   /** Member-controlled preference for automatic anonymous weekly battery sharing. */
@@ -72,6 +104,7 @@ interface InvitePayload {
   createdAt: number;
   syncKey: string;
   leaderPubkey: string;
+  relays?: string[];
 }
 
 function bytesToHex(bytes: Uint8Array): string {
@@ -160,6 +193,7 @@ export async function createOrganizationInvite(name: string, passcode: string) {
     createdAt: Date.now(),
     syncKey: bytesToBase64Url(syncKey),
     leaderPubkey: getPublicKey(leaderSecret),
+    relays: [...DEFAULT_ORGANIZATION_RELAYS],
   };
 
   const encrypted = await webCrypto.subtle.encrypt(
@@ -183,6 +217,7 @@ export async function createOrganizationInvite(name: string, passcode: string) {
       createdAt: payload.createdAt,
       syncKey: payload.syncKey,
       leaderPubkey: payload.leaderPubkey,
+      relays: normalizeOrganizationRelays(payload.relays),
       leaderSecretKey: bytesToHex(leaderSecret),
       memberSecretKey: bytesToHex(memberSecret),
     },
@@ -224,6 +259,7 @@ export async function openOrganizationInvite(inviteCode: string, passcode: strin
       createdAt: payload.createdAt,
       syncKey: payload.syncKey,
       leaderPubkey: payload.leaderPubkey,
+      relays: normalizeOrganizationRelays(payload.relays),
       memberSecretKey: bytesToHex(generateSecretKey()),
     };
   } catch (error) {
