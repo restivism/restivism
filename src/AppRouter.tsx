@@ -1,6 +1,7 @@
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { ScrollToTop } from "./components/ScrollToTop";
 
+import Battery from "./pages/Battery";
 import Index from "./pages/Index";
 import RestSession from "./pages/RestSession";
 import TeamRest from "./pages/TeamRest";
@@ -13,6 +14,7 @@ export function AppRouter() {
       <ScrollToTop />
       <Routes>
         <Route path="/" element={<Index />} />
+        <Route path="/battery" element={<Battery />} />
         <Route path="/rest/:practiceId" element={<RestSession />} />
         <Route path="/team" element={<TeamRest />} />
         {/* NIP-19 route for npub1, note1, naddr1, nevent1, nprofile1 */}

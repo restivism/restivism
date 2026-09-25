@@ -27,8 +27,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
           <nav className="ml-auto flex items-center rounded-full border bg-card/80 p-1 text-sm font-bold" aria-label="Primary">
             <NavLink
-              to="/"
-              end
+              to="/battery"
               className={({ isActive }) => cn(
                 'rounded-full px-3 py-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                 isActive ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground',

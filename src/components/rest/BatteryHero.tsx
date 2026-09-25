@@ -145,7 +145,7 @@ export function BatteryHero({ now }: { now: number }) {
 
       <div className="mx-auto max-w-3xl px-4 pb-20 pt-10 sm:px-6 sm:pb-28 sm:pt-16">
         <p className="text-lg font-semibold text-white/85">{greeting(new Date(now).getHours())}</p>
-        <h1 id="battery-heading" className="mt-1 scroll-mt-24 text-5xl font-semibold leading-[1.05] tracking-tight text-white drop-shadow-sm sm:text-7xl">
+        <h1 id="battery-heading" className="mt-1 text-5xl font-semibold leading-[1.05] tracking-tight text-white drop-shadow-sm sm:text-7xl">
           How is your battery?
         </h1>
         <p className="mt-4 max-w-xl text-lg leading-relaxed text-white/85 sm:text-xl">

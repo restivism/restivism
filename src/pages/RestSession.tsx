@@ -72,7 +72,7 @@ function SessionFlow({ recharge }: { recharge: Recharge }) {
       <div className="mx-auto flex min-h-dvh max-w-xl flex-col px-4 py-6 sm:px-6">
         <header className="flex items-center justify-between gap-2">
           <Button asChild variant="ghost" className="rounded-full text-base">
-            <Link to="/">
+            <Link to="/battery">
               <ArrowLeft className="size-5" aria-hidden />
               Your plan
             </Link>
@@ -163,7 +163,7 @@ function SessionFlow({ recharge }: { recharge: Recharge }) {
             </div>
             <RechargeCheckin session={session} />
             <Button asChild size="lg" className="h-12 rounded-full text-base">
-              <Link to="/">Back to your plan</Link>
+              <Link to="/battery">Back to your plan</Link>
             </Button>
           </div>
         )}
@@ -275,7 +275,7 @@ function Running({ recharge, minutes, speed, muted, paused, onPausedChange, onFi
     if (finished.current) return;
     finished.current = true;
     if (restedMinutes >= 1) onFinish(restedMinutes);
-    else navigate('/');
+    else navigate('/battery');
   };
 
   // A new prompt each minute, or every few seconds of a sped-up demo.

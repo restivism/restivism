@@ -188,7 +188,8 @@ src/
 ├── components/RestProvider.tsx
 ├── components/rest/
 └── pages/
-    ├── Index.tsx
+    ├── Index.tsx                # Landing: why rest matters, and the loop
+    ├── Battery.tsx              # /battery: check in by tap or voice, plan, record
     ├── RestSession.tsx
     └── TeamRest.tsx             # Organization gate + organization rest workspace
 ```

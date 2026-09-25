@@ -1,5 +1,6 @@
-import { ArrowDown } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 
 import { cn } from '@/lib/utils';
 
@@ -37,7 +38,6 @@ const STEPS: Step[] = [
       <img
         src="/team.webp"
         alt=""
-        loading="lazy"
         className="size-20 rounded-xl sm:h-28 sm:w-40 object-cover object-[center_65%] shadow-md"
       />
     ),
@@ -45,14 +45,7 @@ const STEPS: Step[] = [
   },
 ];
 
-/** Bring the battery check-in into view and put focus on it. */
-function focusBattery() {
-  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  document.getElementById('battery-heading')?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
-  document.querySelector<HTMLElement>('[role="radio"][tabindex="0"]')?.focus({ preventScroll: true });
-}
-
-/** Leads the page when there is no recent reading: why rest matters to movements, and how the loop works. */
+/** Why rest matters to movements, and how the loop works. The landing page's content. */
 export function RestLoop() {
   return (
     <section
@@ -88,14 +81,13 @@ export function RestLoop() {
       </ol>
 
       <div className="flex justify-center">
-        <button
-          type="button"
-          onClick={focusBattery}
+        <Link
+          to="/battery"
           className="inline-flex h-12 items-center gap-2 rounded-full bg-primary px-6 text-base font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
-          <ArrowDown className="size-5 motion-safe:animate-float" aria-hidden />
           Start with your battery
-        </button>
+          <ArrowRight className="size-5" aria-hidden />
+        </Link>
       </div>
     </section>
   );
